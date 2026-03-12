@@ -45,7 +45,7 @@ async def _broadcast(message: str):
             await client.send(message)
         except Exception:
             pass
-
+ 
 
 # ─── WebSocket connection handler ───
 async def ws_handler(websocket):
