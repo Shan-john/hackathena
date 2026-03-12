@@ -1,14 +1,14 @@
 """
-Accelerometer Tap Detection + WebSocket Server
-──────────────────────────────────────────────
-Reads tap events from the Windows accelerometer and broadcasts them over
-WebSocket so the game frontend can receive them in real time.
+Accelerometer Tap Detection + Eye Tracking + WebSocket Server
+──────────────────────────────────────────────────────────────
+Runs two input sensors simultaneously:
+  1. Windows Accelerometer → detects LEFT_TAP / RIGHT_TAP
+  2. Webcam Eye Tracking   → detects BLINK / DOUBLE_BLINK / GAZE
 
-Run this while the game is open:
+All events are broadcast over WebSocket on ws://localhost:8765
+
+Run:
     python main.py
-
-The frontend connects to ws://localhost:8765
-Messages sent:  { "event": "LEFT_TAP" }  or  { "event": "RIGHT_TAP" }
 """
 
 import asyncio
@@ -16,12 +16,13 @@ import json
 import time
 import threading
 import websockets
-from winrt.windows.devices.sensors import Accelerometer
+from winsdk.windows.devices.sensors import Accelerometer
+from eye_tracking import start_eye_tracking
 
 # ─── Config ───────────────────────────────────────────
-THRESHOLD = 0.15    # lower = more sensitive (detects lighter taps)
-COOLDOWN  = 0.25    # seconds between accepted taps (debounce)
-WS_PORT   = 8765    # WebSocket port the frontend connects to
+TAP_THRESHOLD = 0.15    # lower = more sensitive
+TAP_COOLDOWN  = 0.25    # seconds between accepted taps
+WS_PORT       = 8765    # WebSocket port
 # ──────────────────────────────────────────────────────
 
 # Connected WebSocket clients
@@ -31,9 +32,7 @@ _clients_lock = threading.Lock()
 last_x       = 0.0
 last_trigger = 0.0
 
-# We store a reference to the main asyncio event loop so the
-# accelerometer callback (which fires on a WinRT thread) can
-# safely schedule coroutines on it.
+# Main asyncio event loop reference (for thread-safe scheduling)
 _main_loop: asyncio.AbstractEventLoop = None
 
 
@@ -46,7 +45,7 @@ async def _broadcast(message: str):
             await client.send(message)
         except Exception:
             pass
-
+ 
 
 # ─── WebSocket connection handler ───
 async def ws_handler(websocket):
@@ -74,13 +73,12 @@ def on_reading_changed(sender, args):
 
     now = time.time()
 
-    if abs(delta_x) > THRESHOLD and (now - last_trigger) > COOLDOWN:
-        direction = "RIGHT_TAP" if delta_x > 0 else "LEFT_TAP"
+    if abs(delta_x) > TAP_THRESHOLD and (now - last_trigger) > TAP_COOLDOWN:
+        direction = "LEFT_TAP" if delta_x > 0 else "RIGHT_TAP"
         print(f"[TAP] {direction}  (delta: {delta_x:+.3f})")
 
         msg = json.dumps({"event": direction})
 
-        # Schedule broadcast on the main event loop (thread-safe)
         if _main_loop is not None and _main_loop.is_running():
             asyncio.run_coroutine_threadsafe(_broadcast(msg), _main_loop)
 
@@ -92,17 +90,20 @@ async def main():
     global _main_loop
     _main_loop = asyncio.get_running_loop()
 
+    # 1. Start Accelerometer
     accel = Accelerometer.get_default()
-    token = None
-
     if accel is None:
-        print("[WARN] No accelerometer found — running WebSocket server without tap input.")
+        print("[WARN] No accelerometer found — tap detection disabled.")
+        token = None
     else:
-        # Max sensitivity
         accel.report_interval = accel.minimum_report_interval
-        print(f"[Accel] Started — interval: {accel.report_interval}ms, threshold: {THRESHOLD}")
         token = accel.add_reading_changed(on_reading_changed)
+        print(f"[Accel] ✅ Started — interval: {accel.report_interval}ms")
 
+    # 2. Start Eye Tracking (background thread)
+    start_eye_tracking(_broadcast, _main_loop)
+
+    # 3. Start WebSocket Server
     print(f"[WS] WebSocket server listening on ws://localhost:{WS_PORT}")
     print("[WS] Waiting for frontend connection...")
 
@@ -110,9 +111,9 @@ async def main():
         try:
             await asyncio.Future()  # Run forever
         finally:
-            if accel and token is not None:
+            if accel and token:
                 accel.remove_reading_changed(token)
-            print("\n[Accel] Stopped.")
+            print("\n[Server] Stopped.")
 
 
 if __name__ == "__main__":

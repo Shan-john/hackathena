@@ -1,6 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
-export default function WelcomeScreen({ onStart }) {
+export default function WelcomeScreen({ onStart, menuActionRef }) {
+  useEffect(() => {
+    if (menuActionRef) {
+      menuActionRef.current = (action) => {
+        if (action === 'LEFT_TAP' || action === 'RIGHT_TAP') {
+          onStart();
+        }
+      };
+      return () => { menuActionRef.current = null; };
+    }
+  }, [onStart, menuActionRef]);
   return (
     <div className="welcome-screen" role="dialog" aria-label="Welcome">
       <div className="sparkles">🌳✨🦋</div>

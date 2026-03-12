@@ -66,11 +66,19 @@ export default function App() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
+  // ─── Derived values ───
+  const pathParts        = location.pathname.split('/');
+  const inGame           = location.pathname.startsWith('/play/');
+  const currentInputType = inGame ? pathParts[2] : null;
+
   const canvasRef       = useRef(null);
   const worldRef        = useRef(null);
   const inputRef        = useRef(null);
   const growthAppliedRef = useRef(0);
   const playActionRef   = useRef(null);
+  const menuActionRef   = useRef(null);
+  const gestureLockRef  = useRef(null);
+  const gestureLockTimerRef = useRef(null);
 
   // ─── State ───
   const [coins, setCoins]   = useState(0);
@@ -82,6 +90,8 @@ export default function App() {
   const [successMsg, setSuccessMsg]       = useState(null);
   const [tapDialog, setTapDialog]         = useState(null);
   const [gestureActive, setGestureActive] = useState(false);
+  const [gazePos, setGazePos]             = useState(null);
+  const gazeRef  = useRef(null);
 
   const [unlockedItems, setUnlockedItems] = useState([
     { name: 'Grass Patch',  icon: '🌿', unlocked: true },
@@ -117,12 +127,12 @@ export default function App() {
     setCoins(c => c + amount);
   }, []);
 
-  // ─── Ref to always access latest callbacks from the WebSocket closure ───
+  // ─── Ref to always access latest callbacks from the WebSocket/eye closure ───
   const cbRef = useRef({});
-  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned };
+  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned, currentInputType, inGame };
 
   // ═══════════════════════════════════════════════════════════════
-  //  DIRECT WEBSOCKET to Python tap sensor — no abstraction layers
+  //  DIRECT WEBSOCKET to Python Tap / Eye Tracker sensor
   //  Lives at the App level so it NEVER disconnects on route change
   // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
@@ -144,40 +154,108 @@ export default function App() {
 
         const cb = cbRef.current;
 
-        // Show LEFT / RIGHT dialog + speak aloud
+        // ─── Gaze Tracking ───
+        if (data.event === 'GAZE') {
+          const pos = { x: data.x * window.innerWidth, y: data.y * window.innerHeight };
+          setGazePos(pos);
+          gazeRef.current = pos;
+          return;
+        }
+
+        // ─── Event Handling (Taps & Blinks) ───
+        const isBlink = data.event === 'BLINK' || data.event === 'DOUBLE_BLINK';
+        const isTap   = data.event === 'LEFT_TAP' || data.event === 'RIGHT_TAP';
+        const evtBaseType = isTap ? 'tap' : (isBlink ? 'eye' : null);
+
+        // ── Cooldown / Cross-Gesture Lock for menus ──
+        if (menuActionRef.current && evtBaseType) {
+          if (gestureLockRef.current && gestureLockRef.current !== evtBaseType) {
+            console.log(`[Cooldown] Ignored ${data.event}. Waiting for ${gestureLockRef.current} idle.`);
+            return;
+          }
+          // Lock to this gesture type for 2 seconds to prevent accidental triggers
+          gestureLockRef.current = evtBaseType;
+          if (gestureLockTimerRef.current) clearTimeout(gestureLockTimerRef.current);
+          gestureLockTimerRef.current = setTimeout(() => {
+            gestureLockRef.current = null;
+          }, 2000);
+        }
+
+        // Show UI feedback
         if (data.event === 'LEFT_TAP') {
           cb.handleTapDetected?.('⬅️ LEFT TAP');
           cb.showSpeechBubble?.('Left tap detected!');
         } else if (data.event === 'RIGHT_TAP') {
           cb.handleTapDetected?.('➡️ RIGHT TAP');
           cb.showSpeechBubble?.('Right tap detected!');
+        } else if (data.event === 'BLINK') {
+          cb.handleTapDetected?.('👁️ BLINK');
+        } else if (data.event === 'DOUBLE_BLINK') {
+          cb.handleTapDetected?.('👀 DOUBLE BLINK');
         }
 
-        // If a mini-game is active, advance its progress
+        // ── Simulate REAL mouse click at gaze position for blinks ──
+        if (isBlink) {
+          const gaze = gazeRef.current;
+          if (gaze) {
+            const el = document.elementFromPoint(gaze.x, gaze.y);
+            if (el) {
+              if (data.event === 'BLINK') {
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
+              } else {
+                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y })); // fallback
+              }
+            }
+          }
+        }
+
+        // ── Menu Navigation ──
+        if (menuActionRef.current) {
+          if (data.event === 'LEFT_TAP' || data.event === 'BLINK') {
+            menuActionRef.current('LEFT_TAP');   // confirm
+          } else if (data.event === 'RIGHT_TAP' || data.event === 'DOUBLE_BLINK') {
+            menuActionRef.current('RIGHT_TAP');  // cycle
+          }
+          return;
+        }
+
+        // ── Gameplay Inputs ──
+        // Only accept input if it matches the selected type
+        if (cb.currentInputType === 'tap' && !isTap) return;
+        if (cb.currentInputType === 'eye' && !isBlink) return;
+        if (cb.currentInputType !== 'tap' && cb.currentInputType !== 'eye') return;
+
+        // Advance Mini-game
         if (playActionRef.current) {
           playActionRef.current();
           return;
         }
 
-        // Otherwise, grow the island directly
+        // Grow Island
         const world = worldRef.current;
-        if (!world) return;
+        if (!world || !cb.inGame) return;
 
         const rx = (Math.random() - 0.5) * 18;
         const rz = (Math.random() - 0.5) * 18;
-        const pick = Math.random();
-        if (pick < 0.45) {
-          world.growSeed(rx, rz);
-          cb.showSpeechBubble?.('🌱 A new tree sprouts!');
-        } else if (pick < 0.75) {
-          world.addFlower(rx, rz);
-          cb.showSpeechBubble?.('🌸 A flower bloomed!');
-        } else if (pick < 0.90) {
-          world.addAnimal(rx, rz);
-          cb.showSpeechBubble?.('🐰 An animal appeared!');
+        
+        let action = data.event; // BLINK, DOUBLE_BLINK, LEFT_TAP, RIGHT_TAP
+        
+        if (action === 'BLINK' || action === 'LEFT_TAP') {
+          const pick = Math.random();
+          if (pick < 0.45) {
+            world.growSeed(rx, rz);
+            cb.showSpeechBubble?.(isTap ? '🌱 Tap → tree!' : '🌱 Blink → tree!');
+          } else if (pick < 0.75) {
+            world.addFlower(rx, rz);
+            cb.showSpeechBubble?.(isTap ? '🌸 Tap → flower!' : '🌸 Blink → flower!');
+          } else {
+            world.addAnimal(rx, rz);
+            cb.showSpeechBubble?.(isTap ? '🐰 Tap → animal!' : '🐰 Blink → animal!');
+          }
         } else {
           world.addHouse(rx, rz);
-          cb.showSpeechBubble?.('🏠 A little house appeared!');
+          cb.showSpeechBubble?.(isTap ? '🏠 Double Tap → house!' : '🏠 Double Blink → house!');
         }
         cb.handleCoinEarned?.(1);
       };
@@ -286,7 +364,7 @@ export default function App() {
     showSpeechBubble(`${item.icon} ${item.name} placed!`);
   };
 
-  // ─── Derived values ───
+  // ─── Derived values (xp and skill) ───
   const xpForLevel       = xp - XP_PER_LEVEL * (level - 1);
   const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
   const currentSkill     = searchParams.get('skill') || '';
@@ -294,6 +372,14 @@ export default function App() {
   return (
     <>
       <canvas ref={canvasRef} id="game-canvas" />
+
+      {/* Gaze cursor — follows eye position */}
+      {gazePos && (
+        <div
+          className="gaze-cursor"
+          style={{ left: gazePos.x, top: gazePos.y }}
+        />
+      )}
 
       <div className="overlay">
 
@@ -326,20 +412,17 @@ export default function App() {
         {successMsg   && <div className="success-toast" role="alert">{successMsg}</div>}
 
         <Routes>
-          <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} />} />
+          <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} menuActionRef={menuActionRef} />} />
 
           <Route path="/pick-input" element={
-            <InputSelector
-              onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)}
-              onGestureActivate={() => setGestureActive(true)}
-            />
+            <InputSelector onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)} menuActionRef={menuActionRef} />
           } />
 
           <Route path="/pick-skill/:inputType" element={
             <SkillSelector onConfirm={(skillId) => {
               const paramInput = location.pathname.split('/')[2] || 'tap';
               navigate(`/play/${paramInput}?skill=${skillId}`);
-            }} />
+            }} menuActionRef={menuActionRef} />
           } />
 
           <Route path="/play/:inputType" element={
