@@ -32,7 +32,7 @@ export default function CarRacingGame({ onBack, onCoinsEarned, inputMode, gazePo
   // ── Poll iframe for score & game_over ──
   useEffect(() => {
     scorePollerRef.current = setInterval(() => {
-      try {
+      try { 
         const iframe = iframeRef.current;
         if (!iframe || !iframe.contentWindow) return;
         const iw = iframe.contentWindow;
