@@ -8,6 +8,7 @@ import InputSelector from './components/InputSelector.jsx';
 import SkillSelector from './components/SkillSelector.jsx';
 import IslandSidebar from './components/IslandSidebar.jsx';
 import GameSelector from './components/GameSelector.jsx';
+import GestureCursor from './components/GestureCursor.jsx';
 
 // ─── Auto-growth thresholds ───
 const GROWTH_THRESHOLDS = [
@@ -88,6 +89,7 @@ export default function App() {
   const [speechBubble, setSpeechBubble]   = useState(null);
   const [successMsg, setSuccessMsg]       = useState(null);
   const [tapDialog, setTapDialog]         = useState(null);
+  const [gestureActive, setGestureActive] = useState(false);
   const [gazePos, setGazePos]             = useState(null);
   const gazeRef  = useRef(null);
 
@@ -281,6 +283,13 @@ export default function App() {
     };
   }, []);
 
+  // ─── Derived: current input type (needed by gesture hook below) ───
+  const pathParts        = location.pathname.split('/');
+  const inGame           = location.pathname.startsWith('/play/');
+  const currentInputType = inGame ? pathParts[2] : null;
+
+
+
   // ─── AUTO-GROWTH: coins → world objects ───
   useEffect(() => {
     const world = worldRef.current;
@@ -396,6 +405,8 @@ export default function App() {
           </div>
         )}
 
+
+
         {/* Toasts */}
         {speechBubble && <div className="speech-bubble" role="status" aria-live="polite">{speechBubble}</div>}
         {successMsg   && <div className="success-toast" role="alert">{successMsg}</div>}
@@ -465,6 +476,9 @@ export default function App() {
           </Route>
         </Routes>
       </div>
+
+      {/* Hand cursor — active from input selection onwards */}
+      {gestureActive && <GestureCursor />}
     </>
   );
 }

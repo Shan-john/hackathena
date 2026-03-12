@@ -45,7 +45,9 @@
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -82,7 +84,7 @@ canvas#game-canvas {
   pointer-events: none;
 }
 
-.overlay > * {
+.overlay>* {
   pointer-events: auto;
 }
 
@@ -103,8 +105,15 @@ canvas#game-canvas {
 }
 
 @keyframes welcomeFadeIn {
-  from { opacity: 0; transform: scale(1.05); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .welcome-screen h1 {
@@ -117,8 +126,15 @@ canvas#game-canvas {
 }
 
 @keyframes floatTitle {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-8px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 .welcome-screen p {
@@ -137,8 +153,17 @@ canvas#game-canvas {
 }
 
 @keyframes sparkle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.6; transform: scale(1.15); }
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
 }
 
 .start-btn {
@@ -213,8 +238,15 @@ canvas#game-canvas {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-msg-btn {
@@ -269,13 +301,28 @@ canvas#game-canvas {
 }
 
 @keyframes bubblePop {
-  from { opacity: 0; transform: translateX(-50%) scale(0.7); }
-  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
 }
 
 @keyframes bubbleFade {
-  0%, 70% { opacity: 1; }
-  100%    { opacity: 0; pointer-events: none; }
+
+  0%,
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* ============================
@@ -363,8 +410,15 @@ canvas#game-canvas {
 }
 
 @keyframes toastPop {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 /* ============================
@@ -398,7 +452,10 @@ canvas#game-canvas {
    ============================ */
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01s !important;
     transition-duration: 0.01s !important;
   }
@@ -442,7 +499,7 @@ canvas#game-canvas {
   margin-bottom: 8px;
 }
 
-.selection-card > p {
+.selection-card>p {
   font-size: 1.05rem;
   color: #666;
   margin-bottom: 28px;
@@ -604,8 +661,13 @@ canvas#game-canvas {
 }
 
 @keyframes shineBar {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .progress-bar-text {
@@ -633,8 +695,15 @@ canvas#game-canvas {
 }
 
 @keyframes coinPulse {
-  0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
-  50%      { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+  }
 }
 
 /* ============================
@@ -697,7 +766,7 @@ canvas#game-canvas {
   right: -4px;
   font-size: 0.55rem;
   font-weight: 800;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.7);
   color: #ffd700;
   padding: 1px 4px;
   border-radius: 6px;
@@ -733,8 +802,17 @@ canvas#game-canvas {
 }
 
 @keyframes startBtnPulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 6px 30px rgba(255, 107, 107, 0.4); }
-  50%      { transform: scale(1.04); box-shadow: 0 8px 40px rgba(255, 107, 107, 0.6), 0 0 60px rgba(255, 215, 0, 0.3); }
+
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 6px 30px rgba(255, 107, 107, 0.4);
+  }
+
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 8px 40px rgba(255, 107, 107, 0.6), 0 0 60px rgba(255, 215, 0, 0.3);
+  }
 }
 
 .start-game-btn:hover {
@@ -788,7 +866,7 @@ canvas#game-canvas {
   margin-bottom: 6px;
 }
 
-.game-selector-card > p {
+.game-selector-card>p {
   font-size: 1rem;
   color: #666;
   margin-bottom: 24px;
@@ -842,7 +920,8 @@ canvas#game-canvas {
   font-family: var(--font-main);
 }
 
-.game-tile:hover, .game-tile.hovered {
+.game-tile:hover,
+.game-tile.hovered {
   border-color: var(--color-accent);
   transform: translateY(-4px);
   box-shadow: var(--shadow-glow), var(--shadow-float);
@@ -1005,7 +1084,7 @@ canvas#game-canvas {
   border-radius: 100px;
   padding: 12px 32px;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(255,215,0,0.3);
+  box-shadow: 0 4px 20px rgba(255, 215, 0, 0.3);
   animation: tapPopDown 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   pointer-events: none;
 }
@@ -1018,11 +1097,176 @@ canvas#game-canvas {
   text-transform: uppercase;
 }
 
+
 @keyframes tapPopDown {
-  from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  from {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
 }
 
+/* ============================
+   Gesture Camera Overlay
+   ============================ */
+
+.gesture-camera {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1000;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(15, 12, 41, 0.85);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(167, 139, 250, 0.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(167, 139, 250, 0.1);
+  transition: all 0.3s ease;
+  animation: gestureCamSlideIn 0.4s ease-out;
+}
+
+.gesture-camera:hover {
+  border-color: rgba(167, 139, 250, 0.7);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 50px rgba(167, 139, 250, 0.2);
+}
+
+.gesture-camera.minimized {
+  width: auto;
+}
+
+@keyframes gestureCamSlideIn {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.gesture-camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gesture-camera-status {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #a78bfa;
+  font-family: var(--font-main, 'Nunito', sans-serif);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.gesture-camera-toggle {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: white;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gesture-camera-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+.gesture-camera-canvas {
+  display: block;
+  width: 240px;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 0 0 14px 14px;
+}
+
+@media (max-width: 640px) {
+  .gesture-camera {
+    bottom: 10px;
+    left: 10px;
+  }
+
+  .gesture-camera-canvas {
+    width: 180px;
+    height: 135px;
+  }
+}
+
+/* ============================
+   Gesture Cursor (Hand Tracking)
+   ============================ */
+
+.gesture-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  will-change: transform;
+}
+
+.gesture-cursor-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.9) 0%, rgba(167, 139, 250, 0.3) 70%);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 0 12px rgba(167, 139, 250, 0.6),
+    0 0 30px rgba(167, 139, 250, 0.2);
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gesture-cursor.pinching .gesture-cursor-dot {
+  transform: translate(-50%, -50%) scale(0.6);
+  background: radial-gradient(circle, rgba(74, 222, 128, 0.95) 0%, rgba(74, 222, 128, 0.3) 70%);
+  border-color: #4ade80;
+  box-shadow:
+    0 0 20px rgba(74, 222, 128, 0.8),
+    0 0 40px rgba(74, 222, 128, 0.3);
+}
+
+.gesture-cursor-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.gesture-cursor-ring circle {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+/* Hover highlight on interactive elements */
+.gesture-hover {
+  outline: 3px solid rgba(167, 139, 250, 0.7) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.3) !important;
+  transition: outline 0.15s ease, box-shadow 0.15s ease !important;
+}
 /* --- Gaze Cursor (eye tracking) --- */
 .gaze-cursor {
   position: fixed;
