@@ -992,3 +992,36 @@ canvas#game-canvas {
   color: #aaa;
 }
 
+
+/* --- Tap Direction Dialog --- */
+.tap-dialog {
+  position: fixed;
+  top: 50%;
+.tap-dialog {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: rgba(20, 20, 50, 0.92);
+  border: 2px solid #FFD700;
+  border-radius: 100px;
+  padding: 12px 32px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(255,215,0,0.3);
+  animation: tapPopDown 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+}
+
+.tap-dialog-text {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #FFD700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@keyframes tapPopDown {
+  from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}

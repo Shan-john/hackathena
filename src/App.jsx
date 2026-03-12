@@ -9,7 +9,7 @@ import SkillSelector from './components/SkillSelector.jsx';
 import IslandSidebar from './components/IslandSidebar.jsx';
 import GameSelector from './components/GameSelector.jsx';
 
-// ─── Auto-growth thresholds: at every N coins, add something to the island ───
+// ─── Auto-growth thresholds ───
 const GROWTH_THRESHOLDS = [
   { coins: 0,   add: 'tree' },
   { coins: 20,  add: 'flower' },
@@ -35,46 +35,20 @@ const XP_PER_LEVEL = 80;
 const MAX_LEVEL = 5;
 
 // ==========================================
-// GAME LAYOUT: Handles Three.js & Input Init
+// GAME LAYOUT: Only initializes Three.js world
 // ==========================================
-function GameLayout({ canvasRef, worldRef, inputRef, showSpeechBubble, playActionRef }) {
+function GameLayout({ canvasRef, worldRef }) {
   const { inputType } = useParams();
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    if (worldRef.current) return; // Already initialized
+    if (worldRef.current) return;
 
     const world = new IsometricWorld(canvasRef.current);
     worldRef.current = world;
 
-    const input = new InputSystem();
-    inputRef.current = input;
-
-    // Only init the selected input type from the URL
-    if (inputType === 'voice') input.initVoice();
-    if (inputType === 'eye') input.initEyeTracking();
-    if (inputType === 'gesture') input.initGestures();
-    if (inputType === 'tap') {
-      // Connect to the Python accelerometer WebSocket server (main.py must be running)
-      input.initTapSensor('ws://localhost:8765');
-    }
-    // Mouse/click always works alongside the selected input
-
-    input.onAction(({ action, source }) => {
-      console.log(`[Game] Action: ${action} from ${source}`);
-      if (playActionRef && playActionRef.current) {
-        // Any recognized 'action' string (e.g. 'grow', 'wake', 'tap_right') drives game progress
-        playActionRef.current();
-      }
-    });
-
-    setTimeout(() => {
-      showSpeechBubble("Welcome to your magical island!");
-    }, 800);
-
     return () => {
       world.dispose();
-      input.dispose();
       worldRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,78 +64,38 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  
-  const canvasRef = useRef(null);
-  const worldRef = useRef(null);
-  const inputRef = useRef(null);
-  const growthAppliedRef = useRef(0);
-  const playActionRef = useRef(null);
 
-  // ─── Global State ───
-  const [coins, setCoins] = useState(0);
-  const [xp, setXp] = useState(0);
-  const [level, setLevel] = useState(1);
-  
-  const [activeGame, setActiveGame] = useState(null);
-  const [gameProgress, setGameProgress] = useState(0);
-  const [speechBubble, setSpeechBubble] = useState(null);
-  const [successMsg, setSuccessMsg] = useState(null);
+  const canvasRef       = useRef(null);
+  const worldRef        = useRef(null);
+  const inputRef        = useRef(null);
+  const growthAppliedRef = useRef(0);
+  const playActionRef   = useRef(null);
+
+  // ─── State ───
+  const [coins, setCoins]   = useState(0);
+  const [xp, setXp]         = useState(0);
+  const [level, setLevel]   = useState(1);
+  const [activeGame, setActiveGame]       = useState(null);
+  const [gameProgress, setGameProgress]   = useState(0);
+  const [speechBubble, setSpeechBubble]   = useState(null);
+  const [successMsg, setSuccessMsg]       = useState(null);
+  const [tapDialog, setTapDialog]         = useState(null);
 
   const [unlockedItems, setUnlockedItems] = useState([
-    { name: 'Grass Patch', icon: '🌿', unlocked: true },
-    { name: 'Small Tree', icon: '🌱', unlocked: true },
-    { name: 'Flower Bed', icon: '🌸', unlocked: false, cost: 30 },
-    { name: 'Stone Path', icon: '🪨', unlocked: false, cost: 60 },
+    { name: 'Grass Patch',  icon: '🌿', unlocked: true },
+    { name: 'Small Tree',   icon: '🌱', unlocked: true },
+    { name: 'Flower Bed',   icon: '🌸', unlocked: false, cost: 30 },
+    { name: 'Stone Path',   icon: '🪨', unlocked: false, cost: 60 },
     { name: 'Little House', icon: '🏠', unlocked: false, cost: 100 },
     { name: 'Castle Tower', icon: '🏰', unlocked: false, cost: 200 },
     { name: 'Magic Bridge', icon: '🌉', unlocked: false, cost: 300 },
-    { name: 'Dragon Friend', icon: '🐉', unlocked: false, cost: 500 },
+    { name: 'Dragon Friend',icon: '🐉', unlocked: false, cost: 500 },
   ]);
-
-  // ─── AUTO-GROWTH ───
-  useEffect(() => {
-    const world = worldRef.current;
-    if (!world) return;
-
-    let newApplied = growthAppliedRef.current;
-    for (let i = newApplied; i < GROWTH_THRESHOLDS.length; i++) {
-      if (coins >= GROWTH_THRESHOLDS[i].coins) {
-        const t = GROWTH_THRESHOLDS[i];
-        const rx = (Math.random() - 0.5) * 18;
-        const rz = (Math.random() - 0.5) * 18;
-
-        if (t.add === 'tree') world.growSeed(rx, rz);
-        else if (t.add === 'flower') world.addFlower(rx, rz);
-        else if (t.add === 'animal') world.addAnimal(rx, rz);
-        else if (t.add === 'house') world.addHouse(rx, rz);
-        
-        newApplied = i + 1;
-      } else break;
-    }
-    growthAppliedRef.current = newApplied;
-  }, [coins]);
-
-  // ─── Level up & Unlocks ───
-  useEffect(() => {
-    if (xp >= XP_PER_LEVEL * level && level < MAX_LEVEL) {
-      setLevel(l => l + 1);
-      showSuccess(`🎉 Level Up! Welcome to ${LEVEL_NAMES[Math.min(level, LEVEL_NAMES.length - 1)]}!`);
-    }
-  }, [xp, level]);
-
-  useEffect(() => {
-    setUnlockedItems(prev => prev.map(item => {
-      if (!item.unlocked && item.cost && coins >= item.cost) {
-        return { ...item, unlocked: true };
-      }
-      return item;
-    }));
-  }, [coins]);
 
   // ─── Helpers ───
   const showSpeechBubble = useCallback((text) => {
     setSpeechBubble(text);
-    if (inputRef.current) inputRef.current.say(text);
+    inputRef.current?.say(text);
     setTimeout(() => setSpeechBubble(null), 3000);
   }, []);
 
@@ -172,26 +106,153 @@ export default function App() {
 
   const handleQuickChat = useCallback((msg) => showSpeechBubble(`${msg.emoji} ${msg.text}`), [showSpeechBubble]);
 
-  // ─── PLAYING a mini-game ───
+  const handleTapDetected = useCallback((dir) => {
+    setTapDialog(dir);
+    setTimeout(() => setTapDialog(null), 1500);
+  }, []);
+
+  const handleCoinEarned = useCallback((amount) => {
+    setCoins(c => c + amount);
+  }, []);
+
+  // ─── Ref to always access latest callbacks from the WebSocket closure ───
+  const cbRef = useRef({});
+  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned };
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DIRECT WEBSOCKET to Python tap sensor — no abstraction layers
+  //  Lives at the App level so it NEVER disconnects on route change
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let ws = null;
+    let disposed = false;
+
+    function connect() {
+      if (disposed) return;
+      ws = new WebSocket('ws://localhost:8765');
+
+      ws.onopen = () => {
+        console.log('[Tap] ✅ WebSocket connected to Python tap sensor');
+      };
+
+      ws.onmessage = (evt) => {
+        let data;
+        try { data = JSON.parse(evt.data); } catch { return; }
+        console.log('[Tap] Received:', data.event);
+
+        const cb = cbRef.current;
+
+        // Show LEFT / RIGHT dialog + speak aloud
+        if (data.event === 'LEFT_TAP') {
+          cb.handleTapDetected?.('⬅️ LEFT TAP');
+          cb.showSpeechBubble?.('Left tap detected!');
+        } else if (data.event === 'RIGHT_TAP') {
+          cb.handleTapDetected?.('➡️ RIGHT TAP');
+          cb.showSpeechBubble?.('Right tap detected!');
+        }
+
+        // If a mini-game is active, advance its progress
+        if (playActionRef.current) {
+          playActionRef.current();
+          return;
+        }
+
+        // Otherwise, grow the island directly
+        const world = worldRef.current;
+        if (!world) return;
+
+        const rx = (Math.random() - 0.5) * 18;
+        const rz = (Math.random() - 0.5) * 18;
+        const pick = Math.random();
+        if (pick < 0.45) {
+          world.growSeed(rx, rz);
+          cb.showSpeechBubble?.('🌱 A new tree sprouts!');
+        } else if (pick < 0.75) {
+          world.addFlower(rx, rz);
+          cb.showSpeechBubble?.('🌸 A flower bloomed!');
+        } else if (pick < 0.90) {
+          world.addAnimal(rx, rz);
+          cb.showSpeechBubble?.('🐰 An animal appeared!');
+        } else {
+          world.addHouse(rx, rz);
+          cb.showSpeechBubble?.('🏠 A little house appeared!');
+        }
+        cb.handleCoinEarned?.(1);
+      };
+
+      ws.onerror = () => {
+        console.warn('[Tap] WebSocket error — is main.py running?');
+      };
+
+      ws.onclose = () => {
+        console.log('[Tap] Disconnected. Retrying in 3s…');
+        if (!disposed) setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+
+    // Also create InputSystem for voice/eye/gesture (not for taps)
+    const input = new InputSystem();
+    inputRef.current = input;
+
+    return () => {
+      disposed = true;
+      if (ws) { try { ws.close(); } catch {} }
+      input.dispose();
+    };
+  }, []);
+
+  // ─── AUTO-GROWTH: coins → world objects ───
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!world) return;
+    let n = growthAppliedRef.current;
+    for (let i = n; i < GROWTH_THRESHOLDS.length; i++) {
+      if (coins >= GROWTH_THRESHOLDS[i].coins) {
+        const { add } = GROWTH_THRESHOLDS[i];
+        const rx = (Math.random() - 0.5) * 18;
+        const rz = (Math.random() - 0.5) * 18;
+        if (add === 'tree')   world.growSeed(rx, rz);
+        if (add === 'flower') world.addFlower(rx, rz);
+        if (add === 'animal') world.addAnimal(rx, rz);
+        if (add === 'house')  world.addHouse(rx, rz);
+        n = i + 1;
+      } else break;
+    }
+    growthAppliedRef.current = n;
+  }, [coins]);
+
+  // ─── Level-up ───
+  useEffect(() => {
+    if (xp >= XP_PER_LEVEL * level && level < MAX_LEVEL) {
+      setLevel(l => l + 1);
+      showSuccess(`🎉 Level Up! Welcome to ${LEVEL_NAMES[Math.min(level, LEVEL_NAMES.length - 1)]}!`);
+    }
+  }, [xp, level]); // eslint-disable-line
+
+  // ─── Unlock sidebar items ───
+  useEffect(() => {
+    setUnlockedItems(prev => prev.map(item =>
+      !item.unlocked && item.cost && coins >= item.cost ? { ...item, unlocked: true } : item
+    ));
+  }, [coins]);
+
+  // ─── Mini-game progress ───
   const handleGameClick = useCallback(() => {
     if (!activeGame) return;
-
     setGameProgress(prev => {
       const next = Math.min(prev + 20 + Math.floor(Math.random() * 10), 100);
       if (next >= 100) {
-        const reward = activeGame.reward;
+        const { reward } = activeGame;
         setCoins(c => c + reward.coins);
-        setXp(x => x + reward.xp);
+        setXp(x   => x + reward.xp);
         showSuccess(`${activeGame.emoji} Complete! +${reward.coins} 🪙  +${reward.xp} ⭐`);
         showSpeechBubble(`Great job! You finished ${activeGame.title}!`);
-
         setTimeout(() => {
           setActiveGame(null);
           setGameProgress(0);
-          
-          // Go back to island view
-          const currentUrl = location.pathname;
-          const basePath = currentUrl.replace('/active', '');
+          const basePath = location.pathname.replace('/active', '');
           navigate(`${basePath}?${searchParams.toString()}`);
         }, 1500);
       }
@@ -199,137 +260,93 @@ export default function App() {
     });
   }, [activeGame, showSuccess, showSpeechBubble, navigate, location.pathname, searchParams]);
 
-  // ─── ISLAND TAP: grow something directly when not in a mini-game ───
-  const handleTapAction = useCallback(() => {
-    // If a mini-game is active, drive that instead
-    if (activeGame) {
-      handleGameClick();
-      return;
-    }
-
-    // Otherwise: directly grow the island + give 1 coin per tap
-    const world = worldRef.current;
-    if (!world) return;
-
-    const rx = (Math.random() - 0.5) * 18;
-    const rz = (Math.random() - 0.5) * 18;
-    const pick = Math.random();
-    if (pick < 0.45) {
-      world.growSeed(rx, rz);
-      showSpeechBubble('🌱 A new tree is growing!');
-    } else if (pick < 0.75) {
-      world.addFlower(rx, rz);
-      showSpeechBubble('🌸 A flower bloomed!');
-    } else if (pick < 0.9) {
-      world.addAnimal(rx, rz);
-      showSpeechBubble('🐰 An animal appeared!');
-    } else {
-      world.addHouse(rx, rz);
-      showSpeechBubble('🏠 A little house appeared!');
-    }
-
-    // Each island tap earns 1 coin (slow but satisfying growth without mini-games)
-    setCoins(c => c + 1);
-  }, [activeGame, handleGameClick, worldRef, showSpeechBubble]);
-
-  // Keep playActionRef pointing at the latest handler
   useEffect(() => {
-    playActionRef.current = handleTapAction;
-  }, [handleTapAction]);
+    playActionRef.current = activeGame ? handleGameClick : null;
+  }, [activeGame, handleGameClick]);
 
   const handlePlaceItem = (item) => {
     const world = worldRef.current;
     if (!world || !item.unlocked) return;
     const rx = (Math.random() - 0.5) * 14;
     const rz = (Math.random() - 0.5) * 14;
-    if (item.name.includes('Tree') || item.name.includes('Grass')) world.addTree(rx, rz);
+    if (item.name.includes('Tree') || item.name.includes('Grass')) world.growSeed(rx, rz);
     else if (item.name.includes('Flower')) world.addFlower(rx, rz);
-    else if (item.name.includes('House') || item.name.includes('Castle') || item.name.includes('Bridge')) world.addHouse(rx, rz);
+    else if (['House','Castle','Bridge'].some(k => item.name.includes(k))) world.addHouse(rx, rz);
     else if (item.name.includes('Dragon')) world.addAnimal(rx, rz);
     else world.addFlower(rx, rz);
     showSpeechBubble(`${item.icon} ${item.name} placed!`);
   };
 
-  // ─── UI Variables ───
-  const xpForCurrentLevel = xp - (XP_PER_LEVEL * (level - 1));
-  const xpProgressPercent = Math.min((xpForCurrentLevel / XP_PER_LEVEL) * 100, 100);
-  
-  // Extract input type from URL if present to determine input lock
-  const pathParts = location.pathname.split('/');
-  const inputLocked = location.pathname.startsWith('/play/');
-  const currentInputType = inputLocked ? pathParts[2] : null;
-  const inputLockStyle = inputLocked && currentInputType !== 'tap' ? {} : {};
-  const currentSkill = searchParams.get('skill') || '';
+  // ─── Derived values ───
+  const xpForLevel       = xp - XP_PER_LEVEL * (level - 1);
+  const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
+  const pathParts        = location.pathname.split('/');
+  const inGame           = location.pathname.startsWith('/play/');
+  const currentInputType = inGame ? pathParts[2] : null;
+  const currentSkill     = searchParams.get('skill') || '';
 
-  // ─── Render ───
   return (
     <>
       <canvas ref={canvasRef} id="game-canvas" />
 
-      <div className="overlay" style={inputLockStyle}>
-        
-        {/* Persistent HUD & Toasts inside the Game View only */}
-        {inputLocked && (
+      <div className="overlay">
+
+        {/* HUD */}
+        {inGame && (
           <>
             <div className="hud">
               <div className="hud-badge coin-badge">🪙 {coins}</div>
               <div className="hud-badge level-badge">⭐ Lv.{level} — {LEVEL_NAMES[Math.min(level - 1, 4)]}</div>
               {currentSkill && <div className="hud-badge skill-badge">🧠 {currentSkill}</div>}
             </div>
-
             <div className="progress-bar-container">
-              <div className="progress-bar-fill" style={{ width: `${xpProgressPercent}%` }} />
-              <span className="progress-bar-text">XP: {xpForCurrentLevel}/{XP_PER_LEVEL}</span>
+              <div className="progress-bar-fill" style={{ width: `${xpPercent}%` }} />
+              <span className="progress-bar-text">XP: {xpForLevel}/{XP_PER_LEVEL}</span>
             </div>
-
-            {speechBubble && <div className="speech-bubble" role="status" aria-live="polite">{speechBubble}</div>}
-            {successMsg && <div className="success-toast" role="alert">{successMsg}</div>}
           </>
         )}
 
+        {/* Tap direction dialog */}
+        {tapDialog && (
+          <div className="tap-dialog" role="alert">
+            <span className="tap-dialog-text">{tapDialog}</span>
+          </div>
+        )}
+
+        {/* Toasts */}
+        {speechBubble && <div className="speech-bubble" role="status" aria-live="polite">{speechBubble}</div>}
+        {successMsg   && <div className="success-toast" role="alert">{successMsg}</div>}
+
         <Routes>
-          {/* 1. Welcome Screen */}
           <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} />} />
 
-          {/* 2. Choose Input */}
           <Route path="/pick-input" element={
             <InputSelector onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)} />
           } />
 
-          {/* 3. Choose Skill (reads inputType from URL) */}
           <Route path="/pick-skill/:inputType" element={
-             <SkillSelector onConfirm={(skillId) => {
-               const paramInput = pathParts[2] || 'tap'; // e.g. /pick-skill/eye -> [ "", "pick-skill", "eye" ]
-               navigate(`/play/${paramInput}?skill=${skillId}`);
-             }} />
+            <SkillSelector onConfirm={(skillId) => {
+              const paramInput = location.pathname.split('/')[2] || 'tap';
+              navigate(`/play/${paramInput}?skill=${skillId}`);
+            }} />
           } />
 
-          {/* 4. Game Hub Layout (inits Three.js) */}
           <Route path="/play/:inputType" element={
-            <GameLayout 
-               canvasRef={canvasRef} 
-               worldRef={worldRef} 
-               inputRef={inputRef} 
-               showSpeechBubble={showSpeechBubble} 
-               playActionRef={playActionRef}
-            />
+            <GameLayout canvasRef={canvasRef} worldRef={worldRef} />
           }>
-            
-            {/* 4a. Main Island View */}
             <Route index element={
               <>
                 <IslandSidebar items={unlockedItems} onPlace={handlePlaceItem} />
                 <div className="start-game-area">
-                  <button className="start-game-btn" onClick={() => navigate(`games?${searchParams.toString()}`)}>
+                  <button className="start-game-btn" onClick={() => navigate(`/play/${currentInputType}/games?${searchParams.toString()}`)}>
                     🎮 Start Game
                   </button>
-                  <p className="start-game-hint">Play mini-games to earn coins & grow your island!</p>
+                  <p className="start-game-hint">Tap your device or click to grow your island!</p>
                 </div>
                 <QuickChat onSend={handleQuickChat} />
               </>
             } />
 
-            {/* 4b. Game Selection Screen */}
             <Route path="games" element={
               <GameSelector
                 selectedSkill={currentSkill}
@@ -342,7 +359,6 @@ export default function App() {
               />
             } />
 
-            {/* 4c. Active Game Playing View */}
             <Route path="active" element={
               activeGame && (
                 <div className="active-game-overlay">
@@ -351,21 +367,14 @@ export default function App() {
                     <span className="active-game-emoji">{activeGame.emoji}</span>
                     <h2>{activeGame.title}</h2>
                     <p>{activeGame.description}</p>
-
                     <div className="game-progress-bar">
                       <div className="game-progress-fill" style={{ width: `${gameProgress}%` }} />
                     </div>
                     <span className="game-progress-label">{gameProgress}% complete</span>
-
-                    {gameProgress < 100 ? (
-                      <button className="game-action-btn" onClick={handleGameClick}>
-                        {activeGame.emoji} Tap / Look / Wave to Play!
-                      </button>
-                    ) : (
-                      <div className="game-complete-msg">✅ Complete!</div>
-                    )}
-
-                    <div className="game-reward-preview">Reward: 🪙 {activeGame.reward.coins} coins &nbsp; ⭐ {activeGame.reward.xp} XP</div>
+                    {gameProgress < 100
+                      ? <button className="game-action-btn" onClick={handleGameClick}>{activeGame.emoji} Tap / Look / Wave to Play!</button>
+                      : <div className="game-complete-msg">✅ Complete!</div>}
+                    <div className="game-reward-preview">Reward: 🪙 {activeGame.reward.coins} &nbsp; ⭐ {activeGame.reward.xp} XP</div>
                   </div>
                 </div>
               )

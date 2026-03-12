@@ -31,21 +31,27 @@ _clients_lock = threading.Lock()
 last_x       = 0.0
 last_trigger = 0.0
 
+# We store a reference to the main asyncio event loop so the
+# accelerometer callback (which fires on a WinRT thread) can
+# safely schedule coroutines on it.
+_main_loop: asyncio.AbstractEventLoop = None
+
 
 # ─── Broadcast to all connected clients ───
 async def _broadcast(message: str):
     with _clients_lock:
-        targets = set(_clients)
-    if targets:
-        await asyncio.gather(
-            *[client.send(message) for client in targets],
-            return_exceptions=True
-        )
+        targets = list(_clients)
+    for client in targets:
+        try:
+            await client.send(message)
+        except Exception:
+            pass
 
 
 # ─── WebSocket connection handler ───
 async def ws_handler(websocket):
-    print(f"[WS] Client connected: {websocket.remote_address}")
+    addr = websocket.remote_address
+    print(f"[WS] Client connected: {addr}")
     with _clients_lock:
         _clients.add(websocket)
     try:
@@ -53,12 +59,12 @@ async def ws_handler(websocket):
     finally:
         with _clients_lock:
             _clients.discard(websocket)
-        print(f"[WS] Client disconnected")
+        print("[WS] Client disconnected")
 
 
-# ─── Accelerometer callback ───
+# ─── Accelerometer callback (fires on a WinRT thread) ───
 def on_reading_changed(sender, args):
-    global last_x, last_trigger
+    global last_x, last_trigger, _main_loop
 
     reading = args.reading
     x = reading.acceleration_x
@@ -72,22 +78,20 @@ def on_reading_changed(sender, args):
         direction = "RIGHT_TAP" if delta_x > 0 else "LEFT_TAP"
         print(f"[TAP] {direction}  (delta: {delta_x:+.3f})")
 
-        # Fire-and-forget: schedule the broadcast on the event loop
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    _broadcast(json.dumps({"event": direction})),
-                    loop
-                )
-        except RuntimeError:
-            pass  # Loop not available yet
+        msg = json.dumps({"event": direction})
+
+        # Schedule broadcast on the main event loop (thread-safe)
+        if _main_loop is not None and _main_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_broadcast(msg), _main_loop)
 
         last_trigger = now
 
 
 # ─── Main entry point ───
 async def main():
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
+
     accel = Accelerometer.get_default()
 
     if accel is None:

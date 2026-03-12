@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Tap Test</title></head>
+<body style="font-family:sans-serif; text-align:center; padding:40px; background:#111; color:#fff;">
+  <h1>🔌 WebSocket Tap Test</h1>
+  <p id="status" style="color:orange; font-size:1.4em;">Connecting to ws://localhost:8765…</p>
+  <div id="log" style="font-size:2em; margin-top:30px;"></div>
+  <script>
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+    const ws = new WebSocket('ws://localhost:8765');
+    ws.onopen = () => { status.textContent = '✅ Connected!'; status.style.color='lime'; };
+    ws.onerror = () => { status.textContent = '❌ Error — is main.py running?'; status.style.color='red'; };
+    ws.onclose = () => { status.textContent = '🔴 Disconnected'; status.style.color='red'; };
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      const div = document.createElement('div');
+      div.textContent = `${new Date().toLocaleTimeString()} — ${data.event}`;
+      div.style.padding = '8px';
+      div.style.color = data.event === 'LEFT_TAP' ? '#ff6b6b' : '#69db7c';
+      log.prepend(div);
+    };
+  </script>
+</body>
+</html>
