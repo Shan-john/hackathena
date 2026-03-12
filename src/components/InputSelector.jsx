@@ -8,14 +8,10 @@ const INPUT_TYPES = [
 ];
 
 export default function InputSelector({ onConfirm }) {
-  const [selected, setSelected] = useState(['tap']); // tap on by default
+  const [selected, setSelected] = useState('tap'); // tap on by default
 
   const toggle = (id) => {
-    setSelected(prev =>
-      prev.includes(id)
-        ? prev.filter(s => s !== id)
-        : [...prev, id]
-    );
+    setSelected(id);
   };
 
   return (
@@ -28,15 +24,15 @@ export default function InputSelector({ onConfirm }) {
           {INPUT_TYPES.map(inp => (
             <button
               key={inp.id}
-              className={`input-card ${selected.includes(inp.id) ? 'selected' : ''}`}
+              className={`input-card ${selected === inp.id ? 'selected' : ''}`}
               onClick={() => toggle(inp.id)}
-              aria-pressed={selected.includes(inp.id)}
+              aria-pressed={selected === inp.id}
               aria-label={`${inp.label}: ${inp.desc}`}
             >
               <span className="input-card-icon">{inp.icon}</span>
               <span className="input-card-label">{inp.label}</span>
               <span className="input-card-desc">{inp.desc}</span>
-              {selected.includes(inp.id) && <span className="check-mark">✓</span>}
+              {selected === inp.id && <span className="check-mark">✓</span>}
             </button>
           ))}
         </div>
@@ -44,7 +40,7 @@ export default function InputSelector({ onConfirm }) {
         <button
           className="confirm-btn"
           onClick={() => onConfirm(selected)}
-          disabled={selected.length === 0}
+          disabled={!selected}
         >
           ✨ Continue
         </button>

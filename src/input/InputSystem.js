@@ -20,9 +20,13 @@ export class InputSystem {
     this._dwellFired = false;
 
     // State flags
-    this.voiceReady = false;
-    this.eyeReady = false;
+    this.voiceReady   = false;
+    this.eyeReady     = false;
     this.gestureReady = false;
+    this.tapReady     = false;
+
+    // WebSocket for physical tap sensor (Python backend)
+    this._tapSocket = null;
   }
 
   /** Register a callback: fn({ action, source, data }) */
@@ -214,6 +218,61 @@ export class InputSystem {
     return null;
   }
 
+  // ═══════════════════════════════════════
+  //  4. PHYSICAL TAP SENSOR (Python WS)
+  // ═══════════════════════════════════════
+  /**
+   * Connect to the Python accelerometer WebSocket server.
+   * @param {string} url  WebSocket URL (default: ws://localhost:8765)
+   *
+   * LEFT_TAP  → emits 'tap_left'  (e.g. go to previous / undo)
+   * RIGHT_TAP → emits 'tap_right' (e.g. confirm / next action)
+   */
+  initTapSensor(url = 'ws://localhost:8765') {
+    const connect = () => {
+      const ws = new WebSocket(url);
+      this._tapSocket = ws;
+
+      ws.onopen = () => {
+        this.tapReady = true;
+        console.log('[Input] ✅ Physical tap sensor connected via WebSocket');
+      };
+
+      ws.onmessage = (evt) => {
+        let msg;
+        try { msg = JSON.parse(evt.data); } catch { return; }
+
+        const { event } = msg;
+        if (event === 'LEFT_TAP') {
+          console.log('[Tap] LEFT_TAP received');
+          this._emit('tap_left', 'tap_sensor', { raw: msg });
+          // Also map to the primary game action so a tap drives gameplay
+          this._emit('grow', 'tap_sensor', { raw: msg });
+        } else if (event === 'RIGHT_TAP') {
+          console.log('[Tap] RIGHT_TAP received');
+          this._emit('tap_right', 'tap_sensor', { raw: msg });
+          this._emit('wake', 'tap_sensor', { raw: msg });
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn('[Tap] WebSocket error — is main.py running?', err);
+      };
+
+      ws.onclose = () => {
+        this.tapReady = false;
+        console.log('[Tap] Disconnected. Retrying in 3s…');
+        // Auto-reconnect
+        if (!this._tapDisposed) {
+          setTimeout(() => connect(), 3000);
+        }
+      };
+    };
+
+    this._tapDisposed = false;
+    connect();
+  }
+
   // ═══════════════════════════
   //  TTS Helper
   // ═══════════════════════════
@@ -245,6 +304,11 @@ export class InputSystem {
     }
     if (typeof window.webgazer !== 'undefined') {
       try { window.webgazer.end(); } catch (_) {}
+    }
+    if (this._tapSocket) {
+      this._tapDisposed = true;
+      try { this._tapSocket.close(); } catch (_) {}
+      this._tapSocket = null;
     }
   }
 }

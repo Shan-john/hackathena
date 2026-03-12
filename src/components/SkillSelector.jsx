@@ -20,7 +20,7 @@ export default function SkillSelector({ onConfirm }) {
               key={skill.id}
               className="skill-card"
               style={{ '--skill-color': skill.color }}
-              onClick={() => onConfirm(skill.label)}
+              onClick={() => onConfirm(skill.id)}
               aria-label={`${skill.label}: ${skill.desc}`}
             >
               <span className="skill-card-icon">{skill.icon}</span>
