@@ -98,6 +98,9 @@ export default function GestureCursor() {
       const sy = prev.y + (rawY - prev.y) * SMOOTH_FACTOR;
       posRef.current = { x: sx, y: sy };
 
+      // Broadcast hand position so other components (e.g. CarRacingGame) can use it
+      window.postMessage({ type: 'gesture-pos', x: sx, y: sy }, '*');
+
       // Move cursor element
       if (cursorRef.current) {
         cursorRef.current.style.transform = `translate(${sx}px, ${sy}px)`;
@@ -205,6 +208,11 @@ export default function GestureCursor() {
         });
         if (disposed) { landmarker.close(); return; }
         landmarkerRef.current = landmarker;
+
+        setStatus('Waiting for camera…');
+        // Give Python backend time to release the webcam
+        await new Promise(r => setTimeout(r, 1500));
+        if (disposed) return;
 
         setStatus('Starting camera…');
         const stream = await navigator.mediaDevices.getUserMedia({

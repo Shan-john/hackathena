@@ -2,14 +2,20 @@ import React, { useState, useEffect } from 'react';
 
 const INPUT_TYPES = [
   { id: 'eye',     icon: '👁️',  label: 'Eye Tracking',     desc: 'Look at objects to select them' },
-  { id: 'voice',   icon: '🎤',  label: 'Voice Tracking',   desc: 'Speak commands to play' },
-  { id: 'gesture', icon: '✋',  label: 'Gesture Tracking', desc: 'Wave or point with your hands' },
+  { id: 'gesture', icon: '✋',  label: 'Hand Gesture',     desc: 'Use your hand as a virtual mouse' },
   { id: 'tap',     icon: '👆',  label: 'Tap & Drag',       desc: 'Touch or click to interact' },
 ];
 
-export default function InputSelector({ onConfirm, menuActionRef }) {
-  const [selected, setSelected] = useState(null); // No default initially
+export default function InputSelector({ onConfirm, menuActionRef, onModeSelected }) {
+  const [selected, setSelected] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // Notify parent when selection changes (so gesture/eye activates immediately)
+  useEffect(() => {
+    if (selected && onModeSelected) {
+      onModeSelected(selected);
+    }
+  }, [selected, onModeSelected]);
 
   useEffect(() => {
     if (menuActionRef) {
@@ -52,6 +58,31 @@ export default function InputSelector({ onConfirm, menuActionRef }) {
       <div className="selection-card">
         <h1>🎮 Choose Your Input</h1>
         <p>Pick how you'd like to play. Tap/Select an option twice to confirm!</p>
+
+        {/* Tap Tutorial */}
+        <div className="tap-tutorial" style={{
+          display: 'flex', gap: '16px', justifyContent: 'center',
+          margin: '0 auto 20px', maxWidth: '500px', flexWrap: 'wrap',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'rgba(167,139,250,0.15)', padding: '10px 16px',
+            borderRadius: '12px', fontSize: '0.9rem', color: '#d4c4fb',
+            border: '1px solid rgba(167,139,250,0.3)',
+          }}>
+            <span style={{ fontSize: '1.3em' }}>⬅️</span>
+            <span><strong>Left Tap</strong> → Select / Confirm</span>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            background: 'rgba(96,165,250,0.15)', padding: '10px 16px',
+            borderRadius: '12px', fontSize: '0.9rem', color: '#93c5fd',
+            border: '1px solid rgba(96,165,250,0.3)',
+          }}>
+            <span style={{ fontSize: '1.3em' }}>➡️</span>
+            <span><strong>Right Tap</strong> → Move / Next option</span>
+          </div>
+        </div>
 
         <div className="input-grid">
           {INPUT_TYPES.map(inp => {

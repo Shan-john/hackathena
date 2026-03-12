@@ -49,6 +49,15 @@ const GAMES = [
     reward: { coins: 20, xp: 15 },
     skill: 'fine-motor',
   },
+  {
+    id: 'car-racing',
+    emoji: '🏎️',
+    title: 'Car Racing',
+    description: 'Dodge traffic and race to earn coins! Use eye tracking or gestures to steer.',
+    reward: { coins: 30, xp: 25 },
+    skill: 'fine-motor',
+    isExternal: true,
+  },
 ];
 
 export default function GameSelector({ onSelectGame, onBack, selectedSkill }) {

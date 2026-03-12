@@ -1313,3 +1313,336 @@ canvas#game-canvas {
   border-radius: 8px;
   white-space: nowrap;
 }
+
+/* ============================
+   Car Racing Game Integration
+   ============================ */
+
+.car-racing-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #0a0a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.car-racing-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.car-racing-back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 300;
+  padding: 10px 22px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: var(--font-main);
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.car-racing-back-btn:hover {
+  background: rgba(124, 92, 191, 0.8);
+  transform: translateY(-2px);
+}
+
+/* HUD */
+.car-racing-hud {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 300;
+  display: flex;
+  gap: 12px;
+}
+
+.car-racing-hud-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.car-racing-hud-icon {
+  font-size: 1.3rem;
+}
+
+.car-racing-hud-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.car-racing-hud-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #ffd700;
+}
+
+/* Instructions Overlay */
+.car-racing-instructions {
+  position: absolute;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(10, 10, 30, 0.95), rgba(20, 10, 50, 0.95));
+  animation: welcomeFadeIn 0.6s ease-out;
+}
+
+.car-racing-instructions-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-xl);
+  padding: 48px 56px;
+  max-width: 520px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  animation: slideUp 0.5s ease-out;
+}
+
+.car-racing-instructions-icon {
+  font-size: 4.5rem;
+  margin-bottom: 16px;
+  animation: floatTitle 3s ease-in-out infinite;
+}
+
+.car-racing-instructions-card h2 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 12px;
+  text-shadow: 0 2px 10px rgba(255, 107, 107, 0.4);
+}
+
+.car-racing-instructions-desc {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.car-racing-controls-info {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  margin-bottom: 28px;
+}
+
+.car-racing-controls-info p {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.car-racing-play-btn {
+  padding: 18px 52px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-family: var(--font-main);
+  border: none;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #ff6b6b, #ee5a24, #ffd700);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 30px rgba(255, 107, 107, 0.4);
+  transition: all 0.3s ease;
+  animation: startBtnPulse 2s ease-in-out infinite;
+}
+
+.car-racing-play-btn:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 10px 40px rgba(255, 107, 107, 0.5);
+}
+
+.car-racing-play-btn:active {
+  transform: scale(0.97);
+}
+
+/* Game Over Overlay */
+.car-racing-gameover {
+  position: absolute;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  animation: welcomeFadeIn 0.5s ease-out;
+}
+
+.car-racing-gameover-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-xl);
+  padding: 48px 56px;
+  max-width: 480px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  animation: toastPop 0.5s ease-out;
+}
+
+.car-racing-gameover-icon {
+  font-size: 4rem;
+  margin-bottom: 12px;
+}
+
+.car-racing-gameover-card h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #4ade80;
+  margin-bottom: 24px;
+}
+
+.car-racing-gameover-stats {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.car-racing-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.car-racing-stat-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.car-racing-stat-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #ffd700;
+}
+
+/* Touch/Accessibility Controls */
+.car-racing-touch-controls {
+  position: absolute;
+  bottom: 32px;
+  right: 32px;
+  z-index: 300;
+  display: grid;
+  grid-template-areas:
+    '. up .'
+    'left down right';
+  grid-template-columns: 64px 64px 64px;
+  grid-template-rows: 64px 64px;
+  gap: 6px;
+}
+
+.car-racing-touch-btn {
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 1.6rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.car-racing-touch-btn:active {
+  background: rgba(124, 92, 191, 0.7);
+  transform: scale(0.92);
+  border-color: var(--color-accent);
+}
+
+.car-racing-touch-left { grid-area: left; }
+.car-racing-touch-right { grid-area: right; }
+.car-racing-touch-up { grid-area: up; }
+.car-racing-touch-down { grid-area: down; }
+
+/* ── Head-Movement Steering Indicator ── */
+.car-racing-steer-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 300;
+  padding: 16px 28px;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  border-radius: var(--radius-lg);
+  animation: steerPulse 0.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.car-racing-steer-left {
+  left: 24px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(99, 102, 241, 0.85));
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+.car-racing-steer-right {
+  right: 24px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(59, 130, 246, 0.85));
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+@keyframes steerPulse {
+  0%, 100% { opacity: 0.8; transform: translateY(-50%) scale(1); }
+  50% { opacity: 1; transform: translateY(-50%) scale(1.06); }
+}
+
+/* ── Eye Mode Hint Bar ── */
+.car-racing-eye-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(59, 130, 246, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  white-space: nowrap;
+  pointer-events: none;
+}

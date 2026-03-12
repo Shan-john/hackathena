@@ -9,6 +9,7 @@ import SkillSelector from './components/SkillSelector.jsx';
 import IslandSidebar from './components/IslandSidebar.jsx';
 import GameSelector from './components/GameSelector.jsx';
 import GestureCursor from './components/GestureCursor.jsx';
+import CarRacingGame from './components/CarRacingGame.jsx';
 
 // ─── Auto-growth thresholds ───
 const GROWTH_THRESHOLDS = [
@@ -71,6 +72,9 @@ export default function App() {
   const inGame           = location.pathname.startsWith('/play/');
   const currentInputType = inGame ? pathParts[2] : null;
 
+  // Persistent selected mode — stays active even outside game routes
+  const [selectedMode, setSelectedMode] = useState(null);
+
   const canvasRef       = useRef(null);
   const worldRef        = useRef(null);
   const inputRef        = useRef(null);
@@ -79,6 +83,7 @@ export default function App() {
   const menuActionRef   = useRef(null);
   const gestureLockRef  = useRef(null);
   const gestureLockTimerRef = useRef(null);
+  const wsRef           = useRef(null);
 
   // ─── State ───
   const [coins, setCoins]   = useState(0);
@@ -89,7 +94,7 @@ export default function App() {
   const [speechBubble, setSpeechBubble]   = useState(null);
   const [successMsg, setSuccessMsg]       = useState(null);
   const [tapDialog, setTapDialog]         = useState(null);
-  const [gestureActive, setGestureActive] = useState(false);
+
   const [gazePos, setGazePos]             = useState(null);
   const gazeRef  = useRef(null);
 
@@ -129,7 +134,7 @@ export default function App() {
 
   // ─── Ref to always access latest callbacks from the WebSocket/eye closure ───
   const cbRef = useRef({});
-  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned, currentInputType, inGame };
+  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned, currentInputType, inGame, selectedMode, location };
 
   // ═══════════════════════════════════════════════════════════════
   //  DIRECT WEBSOCKET to Python Tap / Eye Tracker sensor
@@ -144,7 +149,15 @@ export default function App() {
       ws = new WebSocket('ws://localhost:8765');
 
       ws.onopen = () => {
-        console.log('[Tap] ✅ WebSocket connected to Python tap sensor');
+        console.log('[WS] ✅ Connected to Python sensor server');
+        wsRef.current = ws;
+        // Send current mode on connect/reconnect
+        const cb = cbRef.current;
+        const mode = cb.currentInputType || cb.selectedMode;
+        if (mode) {
+          ws.send(JSON.stringify({ set_mode: mode }));
+          console.log(`[WS] Sent set_mode on connect: ${mode}`);
+        }
       };
 
       ws.onmessage = (evt) => {
@@ -162,10 +175,11 @@ export default function App() {
           return;
         }
 
-        // ─── Event Handling (Taps & Blinks) ───
-        const isBlink = data.event === 'BLINK' || data.event === 'DOUBLE_BLINK';
-        const isTap   = data.event === 'LEFT_TAP' || data.event === 'RIGHT_TAP';
-        const evtBaseType = isTap ? 'tap' : (isBlink ? 'eye' : null);
+        // ─── Event Handling (Taps & Blinks & Gestures) ───
+        const isBlink   = data.event === 'BLINK' || data.event === 'DOUBLE_BLINK';
+        const isTap     = data.event === 'LEFT_TAP' || data.event === 'RIGHT_TAP';
+        const isGesture = data.event === 'LEFT_CLICK' || data.event === 'RIGHT_CLICK' || (data.event && data.event.startsWith('GESTURE:'));
+        const evtBaseType = isTap ? 'tap' : (isBlink ? 'eye' : (isGesture ? 'gesture' : null));
 
         // ── Cooldown / Cross-Gesture Lock for menus ──
         if (menuActionRef.current && evtBaseType) {
@@ -192,19 +206,49 @@ export default function App() {
           cb.handleTapDetected?.('👁️ BLINK');
         } else if (data.event === 'DOUBLE_BLINK') {
           cb.handleTapDetected?.('👀 DOUBLE BLINK');
+        } else if (data.event === 'LEFT_CLICK') {
+          cb.handleTapDetected?.('✊ FIST CLICK');
+        } else if (data.event === 'RIGHT_CLICK') {
+          cb.handleTapDetected?.('✌️ VICTORY CLICK');
+        } else if (isGesture) {
+          cb.handleTapDetected?.(`🖐️ ${data.event}`);
         }
 
-        // ── Simulate REAL mouse click at gaze position for blinks ──
-        if (isBlink) {
+        // ── Simulate REAL mouse click at gaze position for blinks (EYE MODE ONLY) ──
+        if (isBlink && (cb.currentInputType === 'eye' || cb.selectedMode === 'eye')) {
           const gaze = gazeRef.current;
           if (gaze) {
             const el = document.elementFromPoint(gaze.x, gaze.y);
             if (el) {
+              // Find the clickable ancestor
+              const clickable = el.closest('button') ||
+                                el.closest('a') ||
+                                el.closest('.input-card') ||
+                                el.closest('.skill-card') ||
+                                el.closest('.game-tile') ||
+                                el.closest('.sidebar-item') ||
+                                el.closest('.game-action-btn') ||
+                                el;
+
+              console.log('[Eye] Blink click on:', clickable.tagName, clickable.className);
+
               if (data.event === 'BLINK') {
-                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
+                clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
+                clickable.click();
               } else {
-                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
-                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y })); // fallback
+                clickable.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: gaze.x, clientY: gaze.y }));
+                clickable.click();
+              }
+
+              // Flash the gaze cursor on click
+              const dot = document.querySelector('.gaze-cursor');
+              if (dot) {
+                dot.style.transform = 'scale(1.8)';
+                dot.style.boxShadow = '0 0 30px rgba(59,130,246,1)';
+                setTimeout(() => {
+                  dot.style.transform = 'scale(1)';
+                  dot.style.boxShadow = '0 0 20px rgba(59,130,246,0.6), 0 0 40px rgba(59,130,246,0.2)';
+                }, 300);
               }
             }
           }
@@ -212,23 +256,45 @@ export default function App() {
 
         // ── Menu Navigation ──
         if (menuActionRef.current) {
-          if (data.event === 'LEFT_TAP' || data.event === 'BLINK') {
+          if (data.event === 'LEFT_TAP' || data.event === 'BLINK' || data.event === 'LEFT_CLICK') {
             menuActionRef.current('LEFT_TAP');   // confirm
-          } else if (data.event === 'RIGHT_TAP' || data.event === 'DOUBLE_BLINK') {
+          } else if (data.event === 'RIGHT_TAP' || data.event === 'DOUBLE_BLINK' || data.event === 'RIGHT_CLICK') {
             menuActionRef.current('RIGHT_TAP');  // cycle
           }
           return;
         }
 
         // ── Gameplay Inputs ──
-        // Only accept input if it matches the selected type
-        if (cb.currentInputType === 'tap' && !isTap) return;
-        if (cb.currentInputType === 'eye' && !isBlink) return;
-        if (cb.currentInputType !== 'tap' && cb.currentInputType !== 'eye') return;
+        // Tap is ALWAYS accepted. Other inputs only if their mode is selected.
+        const inputType = cb.currentInputType || cb.selectedMode;
+        const acceptTap     = isTap;  // taps always work
+        const acceptBlink   = isBlink && inputType === 'eye';
+        const acceptGesture = isGesture && inputType === 'gesture';
+
+        if (!acceptTap && !acceptBlink && !acceptGesture) return;
 
         // Advance Mini-game
         if (playActionRef.current) {
           playActionRef.current();
+          return;
+        }
+
+        // ── Car Racing control forwarding ──
+        if (cb.location && cb.location.pathname.includes('/car-racing')) {
+          // Eye mode: blink = click at gaze position (for car selection & in-game)
+          // Head steering is handled continuously in CarRacingGame via gazePos prop
+          if (isBlink) {
+            const gaze = gazeRef.current;
+            if (gaze) {
+              window.postMessage({ type: 'car-racing-blink-click', x: gaze.x, y: gaze.y }, '*');
+            }
+          }
+          // Tap / gesture → directional controls
+          else if (data.event === 'LEFT_TAP' || data.event === 'LEFT_CLICK') {
+            window.postMessage({ type: 'car-racing-control', action: 'left' }, '*');
+          } else if (data.event === 'RIGHT_TAP' || data.event === 'RIGHT_CLICK') {
+            window.postMessage({ type: 'car-racing-control', action: 'right' }, '*');
+          }
           return;
         }
 
@@ -239,23 +305,23 @@ export default function App() {
         const rx = (Math.random() - 0.5) * 18;
         const rz = (Math.random() - 0.5) * 18;
         
-        let action = data.event; // BLINK, DOUBLE_BLINK, LEFT_TAP, RIGHT_TAP
+        let action = data.event;
         
-        if (action === 'BLINK' || action === 'LEFT_TAP') {
+        if (action === 'BLINK' || action === 'LEFT_TAP' || action === 'LEFT_CLICK') {
           const pick = Math.random();
           if (pick < 0.45) {
             world.growSeed(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🌱 Tap → tree!' : '🌱 Blink → tree!');
+            cb.showSpeechBubble?.(isTap ? '🌱 Tap → tree!' : isGesture ? '🌱 Fist → tree!' : '🌱 Blink → tree!');
           } else if (pick < 0.75) {
             world.addFlower(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🌸 Tap → flower!' : '🌸 Blink → flower!');
+            cb.showSpeechBubble?.(isTap ? '🌸 Tap → flower!' : isGesture ? '🌸 Fist → flower!' : '🌸 Blink → flower!');
           } else {
             world.addAnimal(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🐰 Tap → animal!' : '🐰 Blink → animal!');
+            cb.showSpeechBubble?.(isTap ? '🐰 Tap → animal!' : isGesture ? '🐰 Fist → animal!' : '🐰 Blink → animal!');
           }
         } else {
           world.addHouse(rx, rz);
-          cb.showSpeechBubble?.(isTap ? '🏠 Double Tap → house!' : '🏠 Double Blink → house!');
+          cb.showSpeechBubble?.(isTap ? '🏠 Double Tap → house!' : isGesture ? '🏠 Victory → house!' : '🏠 Double Blink → house!');
         }
         cb.handleCoinEarned?.(1);
       };
@@ -283,12 +349,16 @@ export default function App() {
     };
   }, []);
 
-  // ─── Derived: current input type (needed by gesture hook below) ───
-  const pathParts        = location.pathname.split('/');
-  const inGame           = location.pathname.startsWith('/play/');
-  const currentInputType = inGame ? pathParts[2] : null;
-
-
+  // ─── Persist selected mode & send to Python backend ───
+  useEffect(() => {
+    if (currentInputType) {
+      setSelectedMode(currentInputType);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ set_mode: currentInputType }));
+        console.log(`[Mode] Sent set_mode: ${currentInputType}`);
+      }
+    }
+  }, [currentInputType]);
 
   // ─── AUTO-GROWTH: coins → world objects ───
   useEffect(() => {
@@ -415,7 +485,17 @@ export default function App() {
           <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} menuActionRef={menuActionRef} />} />
 
           <Route path="/pick-input" element={
-            <InputSelector onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)} menuActionRef={menuActionRef} />
+            <InputSelector
+              onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)}
+              menuActionRef={menuActionRef}
+              onModeSelected={(mode) => {
+                setSelectedMode(mode);
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({ set_mode: mode }));
+                  console.log(`[Mode] Immediate set_mode: ${mode}`);
+                }
+              }}
+            />
           } />
 
           <Route path="/pick-skill/:inputType" element={
@@ -445,11 +525,29 @@ export default function App() {
               <GameSelector
                 selectedSkill={currentSkill}
                 onSelectGame={(game) => {
+                  if (game.isExternal && game.id === 'car-racing') {
+                    navigate(`/play/${currentInputType}/car-racing?${searchParams.toString()}`);
+                    return;
+                  }
                   setActiveGame(game);
                   setGameProgress(0);
                   navigate(`/play/${currentInputType}/active?${searchParams.toString()}`);
                 }}
                 onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+              />
+            } />
+
+            <Route path="car-racing" element={
+              <CarRacingGame
+                inputMode={currentInputType || selectedMode || 'tap'}
+                gazePos={gazePos}
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onCoinsEarned={(earned) => {
+                  setCoins(c => c + earned);
+                  setXp(x => x + Math.floor(earned / 2));
+                  showSuccess(`🏎️ Race complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
+                  showSpeechBubble('Great race! Your island is growing! 🌴');
+                }}
               />
             } />
 
@@ -477,8 +575,50 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* Hand cursor — active from input selection onwards */}
-      {gestureActive && <GestureCursor />}
+      {/* Hand gesture virtual mouse — active when gesture input is selected */}
+      {selectedMode === 'gesture' && <GestureCursor />}
+
+      {/* Eye gaze cursor — visible dot that follows eye position */}
+      {selectedMode === 'eye' && gazePos && (
+        <div
+          className="gaze-cursor"
+          style={{
+            position: 'fixed',
+            left: gazePos.x - 15,
+            top: gazePos.y - 15,
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(59,130,246,0.9) 0%, rgba(59,130,246,0.3) 60%, transparent 100%)',
+            border: '2px solid rgba(59,130,246,0.8)',
+            boxShadow: '0 0 20px rgba(59,130,246,0.6), 0 0 40px rgba(59,130,246,0.2)',
+            pointerEvents: 'none',
+            zIndex: 10000,
+            transition: 'left 0.08s ease-out, top 0.08s ease-out',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }}
+        >
+          <div style={{
+            position: 'absolute',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 8, height: 8,
+            borderRadius: '50%',
+            background: '#fff',
+          }} />
+        </div>
+      )}
+
+      {/* Eye mode indicator */}
+      {selectedMode === 'eye' && (
+        <div style={{
+          position: 'fixed', bottom: 20, left: 20, zIndex: 999,
+          background: 'rgba(59, 130, 246, 0.9)', color: '#fff',
+          padding: '10px 18px', borderRadius: '16px',
+          fontSize: '0.9rem', fontWeight: 'bold',
+          boxShadow: '0 4px 15px rgba(59,130,246,0.4)',
+        }}>👁️ Eye Tracking Active — Blink to click</div>
+      )}
     </>
   );
 }
