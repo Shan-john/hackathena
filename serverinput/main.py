@@ -16,7 +16,7 @@ import json
 import time
 import threading
 import websockets
-from winsdk.windows.devices.sensors import Accelerometer
+from winrt.windows.devices.sensors import Accelerometer
 
 # ─── Config ───────────────────────────────────────────
 THRESHOLD = 0.15    # lower = more sensitive (detects lighter taps)
@@ -93,17 +93,16 @@ async def main():
     _main_loop = asyncio.get_running_loop()
 
     accel = Accelerometer.get_default()
+    token = None
 
     if accel is None:
-        print("[ERROR] No accelerometer found on this device.")
-        return
+        print("[WARN] No accelerometer found — running WebSocket server without tap input.")
+    else:
+        # Max sensitivity
+        accel.report_interval = accel.minimum_report_interval
+        print(f"[Accel] Started — interval: {accel.report_interval}ms, threshold: {THRESHOLD}")
+        token = accel.add_reading_changed(on_reading_changed)
 
-    # Max sensitivity
-    accel.report_interval = accel.minimum_report_interval
-    print(f"[Accel] Started — interval: {accel.report_interval}ms, threshold: {THRESHOLD}")
-
-    # Register event-driven tap callback
-    token = accel.add_reading_changed(on_reading_changed)
     print(f"[WS] WebSocket server listening on ws://localhost:{WS_PORT}")
     print("[WS] Waiting for frontend connection...")
 
@@ -111,7 +110,8 @@ async def main():
         try:
             await asyncio.Future()  # Run forever
         finally:
-            accel.remove_reading_changed(token)
+            if accel and token is not None:
+                accel.remove_reading_changed(token)
             print("\n[Accel] Stopped.")
 
 

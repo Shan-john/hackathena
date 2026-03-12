@@ -7,11 +7,14 @@ const INPUT_TYPES = [
   { id: 'tap',     icon: '👆',  label: 'Tap & Drag',       desc: 'Touch or click to interact' },
 ];
 
-export default function InputSelector({ onConfirm }) {
+export default function InputSelector({ onConfirm, onGestureActivate }) {
   const [selected, setSelected] = useState('tap'); // tap on by default
 
   const toggle = (id) => {
     setSelected(id);
+    if (id === 'gesture' && onGestureActivate) {
+      onGestureActivate();
+    }
   };
 
   return (

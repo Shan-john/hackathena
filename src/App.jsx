@@ -8,6 +8,7 @@ import InputSelector from './components/InputSelector.jsx';
 import SkillSelector from './components/SkillSelector.jsx';
 import IslandSidebar from './components/IslandSidebar.jsx';
 import GameSelector from './components/GameSelector.jsx';
+import GestureCursor from './components/GestureCursor.jsx';
 
 // ─── Auto-growth thresholds ───
 const GROWTH_THRESHOLDS = [
@@ -80,6 +81,7 @@ export default function App() {
   const [speechBubble, setSpeechBubble]   = useState(null);
   const [successMsg, setSuccessMsg]       = useState(null);
   const [tapDialog, setTapDialog]         = useState(null);
+  const [gestureActive, setGestureActive] = useState(false);
 
   const [unlockedItems, setUnlockedItems] = useState([
     { name: 'Grass Patch',  icon: '🌿', unlocked: true },
@@ -203,6 +205,13 @@ export default function App() {
     };
   }, []);
 
+  // ─── Derived: current input type (needed by gesture hook below) ───
+  const pathParts        = location.pathname.split('/');
+  const inGame           = location.pathname.startsWith('/play/');
+  const currentInputType = inGame ? pathParts[2] : null;
+
+
+
   // ─── AUTO-GROWTH: coins → world objects ───
   useEffect(() => {
     const world = worldRef.current;
@@ -280,9 +289,6 @@ export default function App() {
   // ─── Derived values ───
   const xpForLevel       = xp - XP_PER_LEVEL * (level - 1);
   const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
-  const pathParts        = location.pathname.split('/');
-  const inGame           = location.pathname.startsWith('/play/');
-  const currentInputType = inGame ? pathParts[2] : null;
   const currentSkill     = searchParams.get('skill') || '';
 
   return (
@@ -313,6 +319,8 @@ export default function App() {
           </div>
         )}
 
+
+
         {/* Toasts */}
         {speechBubble && <div className="speech-bubble" role="status" aria-live="polite">{speechBubble}</div>}
         {successMsg   && <div className="success-toast" role="alert">{successMsg}</div>}
@@ -321,7 +329,10 @@ export default function App() {
           <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} />} />
 
           <Route path="/pick-input" element={
-            <InputSelector onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)} />
+            <InputSelector
+              onConfirm={(inputType) => navigate(`/pick-skill/${inputType}`)}
+              onGestureActivate={() => setGestureActive(true)}
+            />
           } />
 
           <Route path="/pick-skill/:inputType" element={
@@ -382,6 +393,9 @@ export default function App() {
           </Route>
         </Routes>
       </div>
+
+      {/* Hand cursor — active from input selection onwards */}
+      {gestureActive && <GestureCursor />}
     </>
   );
 }
