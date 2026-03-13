@@ -613,11 +613,14 @@ export default function App() {
             <Route path="dody-game" element={
               <BodyGame
                 onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
-                onCoinsEarned={(earned) => {
-                  setCoins(c => c + earned);
-                  setXp(x => x + Math.floor(earned / 2));
-                  showSuccess(`🤸 Dody Game complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
-                  showSpeechBubble('Great moves! Stay active! ⚡');
+                onCoinsEarned={(earned, isLive) => {
+                  if (isLive) {
+                    setCoins(c => c + earned);
+                    setXp(x => x + Math.floor(earned / 2));
+                  } else {
+                    showSuccess(`🤸 Dody Game complete! You scored exactly ${earned} 🪙 and ${Math.floor(earned / 2)} ⭐`);
+                    showSpeechBubble('Great moves! Stay active! ⚡');
+                  }
                 }}
               />
             } />
