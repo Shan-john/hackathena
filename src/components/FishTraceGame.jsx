@@ -431,7 +431,7 @@ export default function FishTraceGame({ onBack, onCoinsEarned }) {
 
         if (result.isPerfect) {
             setMessage('Perfect! Flawless tracking!');
-            // Award coins using our main HackAthena callback
+            // Award coins using our main MotionMind callback
             const coinsEarned = Math.max(2, Math.floor(result.points / 100));
             if (onCoinsEarned) onCoinsEarned(coinsEarned);
         } else if (result.correct > 0) {

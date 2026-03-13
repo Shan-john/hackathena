@@ -665,7 +665,7 @@ export default function App() {
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem', animation: 'authLogoBounce 2s ease-in-out infinite' }}>🏰</div>
-          <div>Loading HackAthena...</div>
+          <div>Loading MotionMind...</div>
         </div>
       </div>
     );

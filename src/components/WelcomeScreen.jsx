@@ -14,7 +14,7 @@ export default function WelcomeScreen({ onStart, menuActionRef }) {
   return (
     <div className="welcome-screen" role="dialog" aria-label="Welcome">
       <div className="sparkles">🌳✨🦋</div>
-      <h1>Magic World Builder</h1>
+      <h1>MotionMind</h1>
       <p>
         Welcome to our magical world! 🌸<br />
         Look, wave, tap, or speak — and watch the world come alive.

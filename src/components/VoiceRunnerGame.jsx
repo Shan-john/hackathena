@@ -45,7 +45,7 @@ function CreateEngine(setState, onWinCallback) {
       this.blocks.push(this.blocks[this.blocks.length - 1] + this.blockSpacingPx);
       this.score += 1;
       
-      // If we reach 10 points, trigger win condition in HackAthena
+      // If we reach 10 points, trigger win condition in MotionMind
       if (this.score === 10) {
         if (onWinCallback) onWinCallback();
       }
@@ -233,7 +233,7 @@ export default function VoiceRunnerGame({ onWin, onBack, gameTitle }) {
                     <div>Say "<span style={{color: '#EF476F'}}>UP</span>" or hit Spacebar to jump!</div>
                   )}
                   <div className="voice-runner-status">
-                    Score 10 to win the HackAthena reward!
+                    Score 10 to win the MotionMind reward!
                   </div>
                 </>
               )}

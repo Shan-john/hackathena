@@ -63,7 +63,7 @@ const checkPredictions = (candidateWords, probabilities, topK, timeToLiveMillis)
         currentCallback();
       }
 
-      // Fire global event so App.jsx / HackAthena can use it globally for ALL games
+      // Fire global event so App.jsx / MotionMind can use it globally for ALL games
       window.dispatchEvent(new CustomEvent('voice-command', { detail: topWord }));
     }
   }
