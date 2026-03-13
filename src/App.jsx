@@ -15,27 +15,7 @@ import MemoryTestGame from './components/MemoryTestGame.jsx';
 import CountingBoxesGame from './components/CountingBoxesGame.jsx';
 import BodyGame from './components/BodyGame.jsx';
 
-// ─── Auto-growth thresholds ───
-const GROWTH_THRESHOLDS = [
-  { coins: 0,   add: 'tree' },
-  { coins: 20,  add: 'flower' },
-  { coins: 40,  add: 'flower' },
-  { coins: 60,  add: 'tree' },
-  { coins: 80,  add: 'animal' },
-  { coins: 100, add: 'tree' },
-  { coins: 120, add: 'flower' },
-  { coins: 150, add: 'house' },
-  { coins: 180, add: 'tree' },
-  { coins: 200, add: 'animal' },
-  { coins: 230, add: 'flower' },
-  { coins: 260, add: 'tree' },
-  { coins: 300, add: 'house' },
-  { coins: 350, add: 'tree' },
-  { coins: 400, add: 'animal' },
-  { coins: 450, add: 'flower' },
-  { coins: 500, add: 'house' },
-];
-
+// Auto-growth removed in favor of manual store placement
 const LEVEL_NAMES = ['Meadow', 'Forest', 'Village', 'Castle', 'Fantasy Land'];
 const XP_PER_LEVEL = 80;
 const MAX_LEVEL = 5;
@@ -102,16 +82,32 @@ export default function App() {
   const [gazePos, setGazePos]             = useState(null);
   const gazeRef  = useRef(null);
 
-  const [unlockedItems, setUnlockedItems] = useState([
-    { name: 'Grass Patch',  icon: '🌿', unlocked: true },
-    { name: 'Small Tree',   icon: '🌱', unlocked: true },
-    { name: 'Flower Bed',   icon: '🌸', unlocked: false, cost: 30 },
-    { name: 'Stone Path',   icon: '🪨', unlocked: false, cost: 60 },
-    { name: 'Little House', icon: '🏠', unlocked: false, cost: 100 },
-    { name: 'Castle Tower', icon: '🏰', unlocked: false, cost: 200 },
-    { name: 'Magic Bridge', icon: '🌉', unlocked: false, cost: 300 },
-    { name: 'Dragon Friend',icon: '🐉', unlocked: false, cost: 500 },
+  // ─── Clash of Clans Style Store ───
+  const [storeItems] = useState([
+    { name: 'Flower',       icon: '🌸', cost: 10 },
+    { name: 'Tree',         icon: '🌲', cost: 25 },
+    { name: 'Wall',         icon: '🧱', cost: 50 },
+    { name: 'Cannon',       icon: '💣', cost: 150 },
+    { name: 'Gold Mine',    icon: '💰', cost: 300 },
+    { name: 'Archer Tower', icon: '🏹', cost: 500 },
+    { name: 'House',        icon: '🏠', cost: 800 },
+    { name: 'Dragon',       icon: '🐉', cost: 1500 },
   ]);
+
+  const [placingItem, setPlacingItem] = useState(null);
+
+  // Hook up placement callback
+  useEffect(() => {
+    if (worldRef.current) {
+      worldRef.current.onPlacementComplete = (itemName) => {
+        // Find cost and subtract
+        const item = storeItems.find(i => i.name === itemName);
+        if (item) setCoins(c => Math.max(0, c - item.cost));
+        setPlacingItem(null);
+        if (worldRef.current) worldRef.current.setPlacementMode(null);
+      };
+    }
+  }, [storeItems]);
 
   // ─── Helpers ───
   const showSpeechBubble = useCallback((text) => {
@@ -138,7 +134,25 @@ export default function App() {
 
   // ─── Ref to always access latest callbacks from the WebSocket/eye closure ───
   const cbRef = useRef({});
-  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned, currentInputType, inGame, selectedMode, location };
+  cbRef.current = { showSpeechBubble, handleTapDetected, handleCoinEarned, currentInputType, inGame, selectedMode, location, placingItem };
+
+  // ─── Forward gesture cursor position to ghost mesh for placement ───
+  useEffect(() => {
+    function onGesturePos(e) {
+      if (e.data?.type === 'gesture-pos' && worldRef.current && worldRef.current.placementItem) {
+        worldRef.current.updateGhostFromScreen(e.data.x, e.data.y);
+      }
+    }
+    window.addEventListener('message', onGesturePos);
+    return () => window.removeEventListener('message', onGesturePos);
+  }, []);
+
+  // ─── Forward gaze position to ghost mesh for eye-tracking placement ───
+  useEffect(() => {
+    if (gazePos && worldRef.current && worldRef.current.placementItem) {
+      worldRef.current.updateGhostFromScreen(gazePos.x, gazePos.y);
+    }
+  }, [gazePos]);
 
   // ═══════════════════════════════════════════════════════════════
   //  DIRECT WEBSOCKET to Python Tap / Eye Tracker sensor
@@ -312,32 +326,15 @@ export default function App() {
           return;
         }
 
-        // Grow Island
+        // ── Placement mode: gesture/tap/blink triggers placeAtGhost ──
         const world = worldRef.current;
-        if (!world || !cb.inGame) return;
-
-        const rx = (Math.random() - 0.5) * 18;
-        const rz = (Math.random() - 0.5) * 18;
-        
-        let action = data.event;
-        
-        if (action === 'BLINK' || action === 'LEFT_TAP' || action === 'LEFT_CLICK') {
-          const pick = Math.random();
-          if (pick < 0.45) {
-            world.growSeed(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🌱 Tap → tree!' : isGesture ? '🌱 Fist → tree!' : '🌱 Blink → tree!');
-          } else if (pick < 0.75) {
-            world.addFlower(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🌸 Tap → flower!' : isGesture ? '🌸 Fist → flower!' : '🌸 Blink → flower!');
-          } else {
-            world.addAnimal(rx, rz);
-            cb.showSpeechBubble?.(isTap ? '🐰 Tap → animal!' : isGesture ? '🐰 Fist → animal!' : '🐰 Blink → animal!');
+        if (cb.placingItem && world && world.placementItem) {
+          const placed = world.placeAtGhost();
+          if (placed) {
+            cb.showSpeechBubble?.(`✅ ${cb.placingItem} placed!`);
           }
-        } else {
-          world.addHouse(rx, rz);
-          cb.showSpeechBubble?.(isTap ? '🏠 Double Tap → house!' : isGesture ? '🏠 Victory → house!' : '🏠 Double Blink → house!');
+          return;
         }
-        cb.handleCoinEarned?.(1);
       };
 
       ws.onerror = () => {
@@ -374,25 +371,6 @@ export default function App() {
     }
   }, [currentInputType]);
 
-  // ─── AUTO-GROWTH: coins → world objects ───
-  useEffect(() => {
-    const world = worldRef.current;
-    if (!world) return;
-    let n = growthAppliedRef.current;
-    for (let i = n; i < GROWTH_THRESHOLDS.length; i++) {
-      if (coins >= GROWTH_THRESHOLDS[i].coins) {
-        const { add } = GROWTH_THRESHOLDS[i];
-        const rx = (Math.random() - 0.5) * 18;
-        const rz = (Math.random() - 0.5) * 18;
-        if (add === 'tree')   world.growSeed(rx, rz);
-        if (add === 'flower') world.addFlower(rx, rz);
-        if (add === 'animal') world.addAnimal(rx, rz);
-        if (add === 'house')  world.addHouse(rx, rz);
-        n = i + 1;
-      } else break;
-    }
-    growthAppliedRef.current = n;
-  }, [coins]);
 
   // ─── Level-up ───
   useEffect(() => {
@@ -402,12 +380,6 @@ export default function App() {
     }
   }, [xp, level]); // eslint-disable-line
 
-  // ─── Unlock sidebar items ───
-  useEffect(() => {
-    setUnlockedItems(prev => prev.map(item =>
-      !item.unlocked && item.cost && coins >= item.cost ? { ...item, unlocked: true } : item
-    ));
-  }, [coins]);
 
   // ─── Mini-game progress ───
   const handleGameClick = useCallback(() => {
@@ -437,17 +409,20 @@ export default function App() {
 
   const handlePlaceItem = (item) => {
     const world = worldRef.current;
-    if (!world || !item.unlocked) return;
-    const rx = (Math.random() - 0.5) * 14;
-    const rz = (Math.random() - 0.5) * 14;
-    if (item.name.includes('Tree') || item.name.includes('Grass')) world.growSeed(rx, rz);
-    else if (item.name.includes('Flower')) world.addFlower(rx, rz);
-    else if (['House','Castle','Bridge'].some(k => item.name.includes(k))) world.addHouse(rx, rz);
-    else if (item.name.includes('Dragon')) world.addAnimal(rx, rz);
-    else world.addFlower(rx, rz);
-    showSpeechBubble(`${item.icon} ${item.name} placed!`);
-  };
+    if (!world || coins < item.cost) return;
 
+    if (placingItem === item.name) {
+      // Cancel placement
+      setPlacingItem(null);
+      world.setPlacementMode(null);
+      showSpeechBubble('Placement cancelled');
+    } else {
+      // Start placement
+      setPlacingItem(item.name);
+      world.setPlacementMode(item.name);
+      showSpeechBubble(`Placing ${item.name}... click anywhere to build!`);
+    }
+  };
   // ─── Derived values (xp and skill) ───
   const xpForLevel       = xp - XP_PER_LEVEL * (level - 1);
   const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
@@ -524,7 +499,7 @@ export default function App() {
           }>
             <Route index element={
               <>
-                <IslandSidebar items={unlockedItems} onPlace={handlePlaceItem} />
+                <IslandSidebar items={storeItems} onPlace={handlePlaceItem} coins={coins} placingItem={placingItem} />
                 <div className="start-game-area">
                   <button className="start-game-btn" onClick={() => navigate(`/play/${currentInputType}/games?${searchParams.toString()}`)}>
                     🎮 Start Game

@@ -730,8 +730,9 @@ canvas#game-canvas {
 }
 
 .sidebar-item {
-  width: 52px;
-  height: 52px;
+  min-width: 64px;
+  min-height: 52px;
+  padding: 6px 4px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: var(--radius-md);
   background: var(--color-panel);
@@ -762,14 +763,15 @@ canvas#game-canvas {
 
 .sidebar-lock {
   position: absolute;
-  bottom: -4px;
-  right: -4px;
-  font-size: 0.55rem;
+  bottom: -6px;
+  right: -6px;
+  font-size: 0.6rem;
   font-weight: 800;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.85);
   color: #ffd700;
-  padding: 1px 4px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 /* ============================
