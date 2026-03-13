@@ -33,6 +33,11 @@ function GameLayout({ canvasRef, worldRef }) {
     const world = new IsometricWorld(canvasRef.current);
     worldRef.current = world;
 
+    // Dispatch global event when troops mine coins
+    world.onCoinGenerated = (amount) => {
+      window.dispatchEvent(new CustomEvent('troop-coin-earned', { detail: amount }));
+    };
+
     return () => {
       world.dispose();
       worldRef.current = null;
@@ -153,6 +158,37 @@ export default function App() {
       worldRef.current.updateGhostFromScreen(gazePos.x, gazePos.y);
     }
   }, [gazePos]);
+
+  // ─── Forward current level to world for rendering differences ───
+  useEffect(() => {
+    if (worldRef.current) {
+      worldRef.current.setLevel(level);
+    }
+  }, [level]);
+
+  // ─── Listen for Passive Troop Coins ───
+  useEffect(() => {
+    function onTroopCoin(e) {
+      setCoins(c => c + e.detail);
+      // Create a tiny floating coin element in the DOM at a random spot for flavor
+      const el = document.createElement('div');
+      el.innerText = `+${e.detail} 🪙`;
+      el.style.position = 'fixed';
+      el.style.left = '50%';
+      el.style.top = '50%';
+      el.style.transform = `translate(${Math.random()*100 - 50}px, ${Math.random()*100 - 50}px)`;
+      el.style.color = '#ffd700';
+      el.style.fontWeight = 'bold';
+      el.style.fontSize = '1.2rem';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = '9999';
+      el.style.animation = 'toastPop 0.5s ease-out, bubbleFade 2s ease-in-out forwards';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+    window.addEventListener('troop-coin-earned', onTroopCoin);
+    return () => window.removeEventListener('troop-coin-earned', onTroopCoin);
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════
   //  DIRECT WEBSOCKET to Python Tap / Eye Tracker sensor

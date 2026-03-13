@@ -14,7 +14,25 @@ export class IsometricWorld {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.onPlacementComplete = null; // Callback when item placed
+    this.level = 1; // Default level
     this.init();
+  }
+
+  setLevel(level) {
+    if (this.level !== level) {
+      this.level = level;
+      // Rebuild all kingdoms when level changes
+      this.objects.forEach(obj => {
+        if (obj.userData.type === 'house') {
+          // Clear old graphics
+          while(obj.children.length > 0){ 
+            obj.remove(obj.children[0]); 
+          }
+          this.buildHouseGraphics(obj, this.level);
+          obj.scale.setScalar(2); // reapply scale
+        }
+      });
+    }
   }
 
   init() {
@@ -206,7 +224,92 @@ export class IsometricWorld {
     this.islandRing.position.y = -0.5;
     this.islandGroup.add(this.islandRing);
 
+    // Dirt path leading roughly from Cave Mine
+    const pathGeo = new THREE.PlaneGeometry(3, 8, 4, 8);
+    // Perturb the path vertices slightly to make it look wavy/organic
+    const positions = pathGeo.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+        positions.setX(i, positions.getX(i) + (Math.random() - 0.5) * 0.8);
+    }
+    pathGeo.computeVertexNormals();
+    const pathMat = new THREE.MeshLambertMaterial({ color: 0x8a7051 });
+    const path = new THREE.Mesh(pathGeo, pathMat);
+    path.rotation.x = -Math.PI / 2;
+    path.position.set(-6, 0.03, 0);
+    path.rotation.z = Math.PI / 4;
+    this.islandGroup.add(path);
+
+    // Some fallen logs scattered around
+    for(let i=0; i<3; i++) {
+        const logGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.2, 8);
+        const logMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
+        const log = new THREE.Mesh(logGeo, logMat);
+        log.rotation.z = Math.PI / 2;
+        log.rotation.y = Math.random() * Math.PI;
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 6;
+        log.position.set(Math.cos(a)*r, 0.1, Math.sin(a)*r);
+        log.castShadow = true;
+        this.islandGroup.add(log);
+    }
+
+    // Fireflies / Dust particles
+    const particleGeo = new THREE.BufferGeometry();
+    const particleCount = 50;
+    const posArray = new Float32Array(particleCount * 3);
+    for(let i = 0; i < particleCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 20; // x,y,z spread
+    }
+    // ensure y is always above ground
+    for(let i = 1; i < particleCount * 3; i+=3) {
+        posArray[i] = 0.5 + Math.random() * 5;
+    }
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    const particleMat = new THREE.PointsMaterial({
+        size: 0.15,
+        color: 0xffffaa,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+    this.fireflies = new THREE.Points(particleGeo, particleMat);
+    this.islandGroup.add(this.fireflies);
+
+    // Create a permanent Cave Mine built into the island
+    this.createCaveMine();
+
     this.scene.add(this.islandGroup);
+  }
+
+  createCaveMine() {
+    const caveGroup = new THREE.Group();
+    caveGroup.userData = { type: 'cavemine', id: 'cavemine_core' };
+    
+    // Massive gold-ore Dodecahedron rock
+    const geo = new THREE.DodecahedronGeometry(2.5, 0);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xbdb76b }); // Khaki/yellowish rock
+    const rock = new THREE.Mesh(geo, mat);
+    rock.position.y = 1;
+    rock.castShadow = true;
+    caveGroup.add(rock);
+
+    // Golden chunks sticking out
+    for(let i=0; i<15; i++) {
+        const cGeo = new THREE.DodecahedronGeometry(0.5 + Math.random()*0.5, 0);
+        const cMat = new THREE.MeshLambertMaterial({ color: 0xffd700 }); // Gold
+        const c = new THREE.Mesh(cGeo, cMat);
+        const a = Math.random() * Math.PI * 2;
+        const b = Math.random() * Math.PI;
+        c.position.set(Math.cos(a)*Math.sin(b)*2.3, 1 + Math.cos(b)*2.3, Math.sin(a)*Math.sin(b)*2.3);
+        c.rotation.set(Math.random(), Math.random(), Math.random());
+        c.castShadow = true;
+        caveGroup.add(c);
+    }
+
+    caveGroup.scale.setScalar(1.5);
+    caveGroup.position.set(-10, 0, 0); // Put on far left edge of island
+    this.islandGroup.add(caveGroup);
+    this.objects.push(caveGroup);
   }
 
   // ─────────────────────────────
@@ -258,6 +361,7 @@ export class IsometricWorld {
       group.add(cone);
     }
 
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -295,6 +399,7 @@ export class IsometricWorld {
     center.position.y = 0.55;
     group.add(center);
 
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -305,47 +410,256 @@ export class IsometricWorld {
     const group = new THREE.Group();
     group.userData = { type: 'house', id: `house_${Date.now()}_${Math.random()}` };
 
-    // Walls
-    const wallGeo = new THREE.BoxGeometry(2, 1.5, 1.8);
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xfff5e6 });
-    const walls = new THREE.Mesh(wallGeo, wallMat);
-    walls.position.y = 0.75;
-    walls.castShadow = true;
-    walls.receiveShadow = true;
-    group.add(walls);
+    const lvl = this.level || 1;
+    this.buildHouseGraphics(group, lvl);
 
-    // Roof
-    const roofGeo = new THREE.ConeGeometry(1.6, 1, 4);
-    const roofMat = new THREE.MeshLambertMaterial({ color: 0xd4634a });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = 2;
-    roof.rotation.y = Math.PI / 4;
-    roof.castShadow = true;
-    group.add(roof);
-
-    // Door
-    const doorGeo = new THREE.PlaneGeometry(0.4, 0.7);
-    const doorMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
-    const door = new THREE.Mesh(doorGeo, doorMat);
-    door.position.set(0, 0.35, 0.91);
-    group.add(door);
-
-    // Window
-    const winGeo = new THREE.PlaneGeometry(0.35, 0.35);
-    const winMat = new THREE.MeshLambertMaterial({ color: 0x87CEEB });
-    const win = new THREE.Mesh(winGeo, winMat);
-    win.position.set(0.6, 1, 0.91);
-    group.add(win);
-
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
+
+    // Spawn a worker troop near the kingdom
+    this.spawnTroop(x + 2, z + 2);
+
     return group;
   }
 
+  buildHouseGraphics(group, lvl) {
+    let wallColor, roofColor, towerColor, hasTowers = false, hasFlags = false;
+
+    if (lvl === 1) { // Meadow -> Simple wooden/stone hut
+      wallColor = 0xd2b48c; // Tan
+      roofColor = 0x8b4513; // Brown
+    } else if (lvl === 2) { // Forest -> Stone keep
+      wallColor = 0x9e9e9e; // Grey stone
+      roofColor = 0x228b22; // Green roof
+      towerColor = 0x808080;
+      hasTowers = true;
+    } else if (lvl === 3) { // Village -> Classic castle
+      wallColor = 0xeaeaea; // White stone
+      roofColor = 0xbd2a2a; // Red roof
+      towerColor = 0xd4d4d4;
+      hasTowers = true;
+    } else if (lvl === 4) { // Castle -> Grand palace
+      wallColor = 0xfffdd0; // Cream
+      roofColor = 0x3b82f6; // Blue roof
+      towerColor = 0xfacc15; // Gold towers
+      hasTowers = true;
+      hasFlags = true;
+    } else { // Fantasy Land -> Crystal fortress (lvl 5+)
+      wallColor = 0x2dd4bf; // Teal/cyan
+      roofColor = 0xc084fc; // Purple roof
+      towerColor = 0x818cf8; // Indigo towers
+      hasTowers = true;
+      hasFlags = true;
+    }
+
+    if (lvl === 1) {
+      // ── Level 1: Starter Wooden Viking Lodge ──
+      // Stone foundation
+      const foundGeo = new THREE.BoxGeometry(2.8, 0.4, 2.8);
+      const foundMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+      const foundation = new THREE.Mesh(foundGeo, foundMat);
+      foundation.position.y = 0.2;
+      foundation.castShadow = true;
+      group.add(foundation);
+
+      // Main Wooden Body
+      const wallGeo = new THREE.BoxGeometry(2.4, 1.6, 2.4);
+      const wallMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b }); // Rich brown wood
+      const walls = new THREE.Mesh(wallGeo, wallMat);
+      walls.position.y = 1.2;
+      walls.castShadow = true;
+      group.add(walls);
+
+      // Angled Timber Roof
+      const roofGeo = new THREE.ConeGeometry(2.2, 1.6, 4);
+      const roofMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 }); // Darker brown
+      const roof = new THREE.Mesh(roofGeo, roofMat);
+      roof.position.y = 2.8;
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      group.add(roof);
+
+      // Side Lean-to (Log extension)
+      const leanGeo = new THREE.BoxGeometry(1, 1, 1.5);
+      const leanTo = new THREE.Mesh(leanGeo, wallMat);
+      leanTo.position.set(1.5, 0.9, 0);
+      leanTo.castShadow = true;
+      group.add(leanTo);
+      const leanRoofGeo = new THREE.ConeGeometry(1.2, 0.8, 4);
+      const leanRoof = new THREE.Mesh(leanRoofGeo, roofMat);
+      leanRoof.position.set(1.5, 1.8, 0);
+      leanRoof.rotation.y = Math.PI / 4;
+      group.add(leanRoof);
+
+      // Sturdy Double Front Door
+      const doorGeo = new THREE.PlaneGeometry(0.8, 1.0);
+      const doorMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(0, 0.9, 1.21);
+      group.add(door);
+
+    } else {
+      // ── Level 2-5: Fortress / Castles ──
+      
+      // Kingdom Main Keep
+      const wallGeo = new THREE.BoxGeometry(2.5, 2, 2.5);
+      const wallMat = new THREE.MeshLambertMaterial({ color: wallColor });
+      const walls = new THREE.Mesh(wallGeo, wallMat);
+      walls.position.y = 1;
+      walls.castShadow = true;
+      group.add(walls);
+
+      // Towers (Level 2+)
+      if (hasTowers) {
+        for (let tx of [-1, 1]) {
+          for (let tz of [-1, 1]) {
+            const tHeight = lvl >= 4 ? 4.5 : 3.5;
+            const towerMat = new THREE.MeshLambertMaterial({ color: towerColor });
+            const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, tHeight, lvl >= 5 ? 6 : 8), towerMat);
+            tower.position.set(tx * 1.3, tHeight / 2, tz * 1.3);
+            tower.castShadow = true;
+            
+            const roofMat = new THREE.MeshLambertMaterial({ color: roofColor });
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.2, lvl >= 5 ? 6 : 8), roofMat);
+            roof.position.set(tx * 1.3, tHeight + 0.6, tz * 1.3);
+            group.add(tower);
+            group.add(roof);
+
+            if (hasFlags) {
+              const flagMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
+              const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), flagMat);
+              flag.position.set(tx * 1.3, tHeight + 1.5, tz * 1.3);
+              group.add(flag);
+            }
+          }
+        }
+      }
+
+      // Main Roof
+      const roofGeo = new THREE.ConeGeometry(2, 1.5, 4);
+      const roofMat = new THREE.MeshLambertMaterial({ color: roofColor });
+      const roof = new THREE.Mesh(roofGeo, roofMat);
+      roof.position.y = 2.75;
+      roof.rotation.y = Math.PI / 4;
+      group.add(roof);
+
+      // Grand Door
+      const doorGeo = new THREE.PlaneGeometry(0.8, 1.2);
+      const doorMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(0, 0.6, 1.26);
+      group.add(door);
+    }
+  }
+
+  // ── Troops (Resource Gatherers) ──
+  spawnTroop(x, z) {
+    const group = new THREE.Group();
+    group.userData = { 
+      type: 'troop', 
+      id: `troop_${Date.now()}`, 
+      targetX: x, 
+      targetZ: z,
+      speed: 0.02 + Math.random() * 0.02,
+      lastCoin: Date.now()
+    };
+
+    // Body
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff4757 }); // Red worker
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 8), bodyMat);
+    body.position.y = 0.3;
+    body.castShadow = true;
+    group.add(body);
+
+    // Head
+    const headMat = new THREE.MeshLambertMaterial({ color: 0xffeaa7 }); // Skin
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), headMat);
+    head.position.y = 0.75;
+    group.add(head);
+
+    // Hard hat
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0xfeca57 }); // Yellow hat
+    const hat = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 8, 0, Math.PI * 2, 0, Math.PI/2), hatMat);
+    hat.position.y = 0.77;
+    group.add(hat);
+
+    // Pickaxe
+    const axeGrp = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6), new THREE.MeshLambertMaterial({color: 0x8b4513}));
+    const headAxe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.05), new THREE.MeshLambertMaterial({color: 0xaaaaaa}));
+    headAxe.position.y = 0.25;
+    axeGrp.add(handle);
+    axeGrp.add(headAxe);
+    axeGrp.position.set(0.3, 0.4, 0);
+    axeGrp.rotation.z = -Math.PI/4;
+    group.add(axeGrp);
+
+    group.scale.setScalar(2);
+    group.position.set(x, 0, z);
+    this.islandGroup.add(group);
+    this.objects.push(group);
+  }
+
+  // ── Lumberjack (Tree cutter) ──
+  spawnLumberjack(x, z, tree) {
+    const group = new THREE.Group();
+    group.userData = { 
+      type: 'lumberjack', 
+      id: `lumberjack_${Date.now()}`, 
+      homeX: x, homeZ: z,
+      tree: tree,
+      state: 'walking',
+      lastChop: 0,
+      chopCount: 0
+    };
+
+    // Body (Blue shirt)
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3b82f6 }); 
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 8), bodyMat);
+    body.position.y = 0.3;
+    body.castShadow = true;
+    group.add(body);
+
+    // Head
+    const headMat = new THREE.MeshLambertMaterial({ color: 0xffeaa7 }); 
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), headMat);
+    head.position.y = 0.75;
+    group.add(head);
+
+    // Axe
+    const axeGrp = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6), new THREE.MeshLambertMaterial({color: 0x8b4513}));
+    const headAxe = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.05), new THREE.MeshLambertMaterial({color: 0xaaaaaa}));
+    headAxe.position.set(0.1, 0.2, 0);
+    axeGrp.add(handle);
+    axeGrp.add(headAxe);
+    axeGrp.position.set(0.3, 0.4, 0);
+    axeGrp.rotation.z = -Math.PI/4;
+    group.add(axeGrp);
+
+    group.scale.setScalar(2);
+    group.position.set(x, 0, z);
+    this.islandGroup.add(group);
+    this.objects.push(group);
+  }
+
+
+
+
+
   addAnimal(x, z) {
     const group = new THREE.Group();
-    group.userData = { type: 'animal', id: `animal_${Date.now()}_${Math.random()}`, state: 'sleeping' };
+    // Update animal to automatically roam initially, rather than just sleep forever
+    group.userData = { 
+      type: 'animal', 
+      id: `animal_${Date.now()}_${Math.random()}`, 
+      state: 'roaming',
+      targetX: x,
+      targetZ: z,
+      speed: 0.01
+    };
 
     // Body (rounded box-ish sphere)
     const bodyGeo = new THREE.SphereGeometry(0.4, 12, 8);
@@ -382,13 +696,18 @@ export class IsometricWorld {
     group.add(eye);
 
     // ZZZ text indicator (sleeping)
-    // We just use a small floating sphere for simplicity
-    const zGeo = new THREE.SphereGeometry(0.06, 6, 6);
-    const zMat = new THREE.MeshBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.7 });
-    const zz = new THREE.Mesh(zGeo, zMat);
-    zz.position.set(0.6, 0.9, 0);
-    zz.name = 'sleepIndicator';
-    group.add(zz);
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.font = '40px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('Zzz', 5, 45);
+    const tex = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.position.set(0.6, 0.9, 0);
+    sprite.name = 'sleepIndicator';
+    group.add(sprite);
 
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
@@ -406,6 +725,7 @@ export class IsometricWorld {
     box.position.y = 0.5;
     box.castShadow = true;
     group.add(box);
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -436,6 +756,7 @@ export class IsometricWorld {
     pivot.position.y = 0.6;
     group.add(pivot);
 
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -467,6 +788,7 @@ export class IsometricWorld {
     tent.castShadow = true;
     group.add(tent);
 
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -498,6 +820,7 @@ export class IsometricWorld {
     cart.castShadow = true;
     group.add(cart);
 
+    group.scale.setScalar(2);
     group.position.set(x, 0, z);
     this.islandGroup.add(group);
     this.objects.push(group);
@@ -532,6 +855,7 @@ export class IsometricWorld {
     else if (type === 'Gold Mine') geo = new THREE.BoxGeometry(1.5, 1, 1.5);
 
     this.ghostMesh = new THREE.Mesh(geo, mat);
+    this.ghostMesh.scale.setScalar(2);
     this.scene.add(this.ghostMesh);
   }
 
@@ -696,9 +1020,31 @@ export class IsometricWorld {
     requestAnimationFrame(this.animate.bind(this));
     const elapsed = this.clock.getElapsedTime();
 
-    // Animate growing objects
+    // ── Random Tree Growth & Lumberjack Spawn ──
+    if (!this.lastTreeSpawn) this.lastTreeSpawn = Date.now();
+    if (Date.now() - this.lastTreeSpawn > 25000) { // Every 25 seconds
+      this.lastTreeSpawn = Date.now();
+      
+      const houses = this.objects.filter(o => o.userData.type === 'house');
+      if (houses.length > 0) {
+        // Spawn a growing tree
+        const treeX = (Math.random() - 0.5) * 14;
+        const treeZ = (Math.random() - 0.5) * 14;
+        const tree = this.growSeed(treeX, treeZ);
+        
+        // Dispatch lumberjack from random house
+        const house = houses[Math.floor(Math.random() * houses.length)];
+        this.spawnLumberjack(house.position.x, house.position.z, tree);
+      }
+    }
+
+    // Capture dead objects to safely remove at end of frame
+    const deadObjects = [];
+
+    // Animate growing objects and troop movements
     this.objects.forEach(obj => {
-      if (obj.userData.growing) {
+      // ── Growth logic ──
+      if (obj.userData.growing && !obj.userData.dead) {
         const s = obj.scale.x;
         const target = obj.userData.growTarget || 1;
         if (s < target - 0.01) {
@@ -709,20 +1055,162 @@ export class IsometricWorld {
         }
       }
 
-      // Gentle idle sway for flowers
+      // ── Gentle idle sway for flowers ──
       if (obj.userData.type === 'flower') {
         obj.rotation.z = Math.sin(elapsed * 1.5 + obj.position.x) * 0.05;
       }
 
-      // Floating sleep indicator
-      if (obj.userData.type === 'animal' && obj.userData.state === 'sleeping') {
+      // ── Floating sleep indicator or Animal Roaming Logic ──
+      if (obj.userData.type === 'animal') {
         const zz = obj.getObjectByName('sleepIndicator');
-        if (zz) {
-          zz.position.y = 0.9 + Math.sin(elapsed * 2) * 0.15;
-          zz.material.opacity = 0.4 + Math.sin(elapsed * 3) * 0.3;
+        if (obj.userData.state === 'sleeping') {
+          if (zz) {
+            zz.material.opacity = 0.4 + Math.sin(elapsed * 3) * 0.3;
+            zz.position.y = 0.9 + Math.sin(elapsed * 2) * 0.15;
+          }
+        } else if (obj.userData.state === 'roaming') {
+          if (zz) zz.material.opacity = 0; // hide zzz
+          
+          const dx = obj.userData.targetX - obj.position.x;
+          const dz = obj.userData.targetZ - obj.position.z;
+          const dist = Math.sqrt(dx*dx + dz*dz);
+          
+          if (dist > 0.1) {
+            obj.position.x += (dx / dist) * obj.userData.speed;
+            obj.position.z += (dz / dist) * obj.userData.speed;
+            obj.rotation.y = Math.atan2(dx, dz); // Face direction
+            obj.position.y = Math.abs(Math.sin(elapsed * 10)) * 0.15; // gentle walk bob
+          } else {
+            // Reached target, occasionally sleep, otherwise pick new spot
+            obj.position.y = 0;
+            if (Math.random() < 0.2) {
+              obj.userData.state = 'sleeping';
+              // wake up later
+              setTimeout(() => { if (!obj.userData.dead) obj.userData.state = 'roaming'; }, 8000 + Math.random()*5000);
+            } else {
+              obj.userData.targetX = (Math.random() - 0.5) * 14;
+              obj.userData.targetZ = (Math.random() - 0.5) * 14;
+            }
+          }
+        }
+      }
+
+      // ── Troop Mining / Moving Logic ──
+      if (obj.userData.type === 'troop') {
+        const dx = obj.userData.targetX - obj.position.x;
+        const dz = obj.userData.targetZ - obj.position.z;
+        const dist = Math.sqrt(dx*dx + dz*dz);
+        
+        // Move towards target
+        if (dist > 0.1) {
+          obj.position.x += (dx / dist) * obj.userData.speed;
+          obj.position.z += (dz / dist) * obj.userData.speed;
+          
+          // Face direction of travel
+          obj.rotation.y = Math.atan2(dx, dz);
+          
+          // Bob while walking
+          obj.position.y = Math.abs(Math.sin(elapsed * 15)) * 0.2;
+          
+          // Swing pickaxe
+          const axe = obj.children[3];
+          if (axe) axe.rotation.z = -Math.PI/4 + Math.sin(elapsed * 20) * 0.5;
+        } else {
+          // Reached target: check if there's a Cave Mine or Gold Mine to mine from
+          const mines = this.objects.filter(o => (o.userData.type === 'goldmine' || o.userData.type === 'cavemine') && !o.userData.dead);
+          if (mines.length > 0) {
+            const mine = mines[Math.floor(Math.random() * mines.length)];
+            // Stand slightly in front of the mine
+            obj.userData.targetX = mine.position.x + (Math.random() * 3 - 1.5);
+            obj.userData.targetZ = mine.position.z + (Math.random() * 3 - 1.5);
+          } else {
+            // No mine, just roam the island randomly
+            obj.position.y = 0;
+            obj.userData.targetX = (Math.random() - 0.5) * 16;
+            obj.userData.targetZ = (Math.random() - 0.5) * 16;
+          }
+        }
+
+        // Generate coins passively every 10 seconds
+        if (Date.now() - obj.userData.lastCoin > 10000) {
+          obj.userData.lastCoin = Date.now();
+          if (this.onCoinGenerated) {
+            this.onCoinGenerated(2); // 2 coins per tick per worker
+          }
+          
+          // Visual pop when mining
+          obj.scale.setScalar(2.3);
+          setTimeout(() => obj.scale.setScalar(2), 200);
+        }
+      }
+
+      // ── Lumberjack Logic ──
+      if (obj.userData.type === 'lumberjack') {
+        const isReturning = obj.userData.state === 'returning';
+        // Go home if tree is removed/dead unexpectedly
+        if (!isReturning && obj.userData.tree.userData.dead) {
+          obj.userData.state = 'returning';
+        }
+
+        const targetX = isReturning ? obj.userData.homeX : obj.userData.tree.position.x;
+        const targetZ = isReturning ? obj.userData.homeZ : obj.userData.tree.position.z;
+
+        const dx = targetX - obj.position.x;
+        const dz = targetZ - obj.position.z;
+        const dist = Math.sqrt(dx*dx + dz*dz);
+        
+        if (dist > 1.2) { // Need to get relatively close to tree or home
+          // Walk
+          const speed = 0.05; // Faster than miner troop
+          obj.position.x += (dx / dist) * speed;
+          obj.position.z += (dz / dist) * speed;
+          obj.rotation.y = Math.atan2(dx, dz);
+          obj.position.y = Math.abs(Math.sin(elapsed * 20)) * 0.2; // faster bobbing
+          const axe = obj.children[2];
+          if (axe) axe.rotation.z = -Math.PI/4 + Math.sin(elapsed * 25) * 0.5;
+        } else {
+          // Reached target
+          obj.position.y = 0;
+          if (isReturning) {
+            // Arrived back at palace -> vanish
+            obj.userData.dead = true;
+            deadObjects.push(obj);
+          } else {
+            // At tree -> Chop!
+            if (Date.now() - obj.userData.lastChop > 800) {
+              obj.userData.lastChop = Date.now();
+              obj.userData.chopCount++;
+              
+              const axe = obj.children[2];
+              if (axe) {
+                axe.rotation.y = Math.PI / 2; // turn axe sideways for big chop
+                axe.rotation.z = -Math.PI/1.2;
+                setTimeout(() => { if(axe) axe.rotation.z = -Math.PI/4; }, 150);
+              }
+              
+              // Chop effect pop on tree
+              obj.userData.tree.scale.setScalar(1.8);
+              setTimeout(() => { if (!obj.userData.tree.userData.dead) obj.userData.tree.scale.setScalar(2); }, 150);
+
+              if (obj.userData.chopCount >= 5) { // Takes 5 chops to fell a tree
+                if (this.onCoinGenerated) this.onCoinGenerated(5); // Cutting a tree yields 5 coins!
+                
+                obj.userData.tree.userData.dead = true;
+                deadObjects.push(obj.userData.tree);
+                
+                obj.userData.state = 'returning';
+              }
+            }
+          }
         }
       }
     });
+
+    // Cleanup dead objects safely from the array and scene
+    if (deadObjects.length > 0) {
+      deadObjects.forEach(d => this.islandGroup.remove(d));
+      this.objects = this.objects.filter(o => !o.userData.dead);
+    }
 
     // Highlight pulse
     if (this.highlighted) {
@@ -743,6 +1231,18 @@ export class IsometricWorld {
     if (this.islandRing) {
       this.islandRing.material.opacity = 0.25 + Math.sin(elapsed * 1.5) * 0.15;
       this.islandRing.scale.setScalar(1 + Math.sin(elapsed * 0.8) * 0.03);
+    }
+
+    // Fireflies / Dust Particle animation
+    if (this.fireflies) {
+      const positions = this.fireflies.geometry.attributes.position.array;
+      for (let i = 1; i < positions.length; i+=3) {
+        // slight upward drift and wobble
+         positions[i] += Math.sin(elapsed * 2 + i) * 0.005;
+         positions[i-1] += Math.cos(elapsed * 1.5 + i) * 0.005; // x wobble
+         positions[i+1] += Math.sin(elapsed * 1.2 + i) * 0.005; // z wobble
+      }
+      this.fireflies.geometry.attributes.position.needsUpdate = true;
     }
 
     // Slow cloud rotation and drifting
