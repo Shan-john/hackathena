@@ -58,9 +58,45 @@ const GAMES = [
     skill: 'fine-motor',
     isExternal: true,
   },
+  {
+    id: 'fish-trace',
+    emoji: '🐠',
+    title: 'Glowing Fish Trace',
+    description: 'Memorize glowing fish and track them as they swim. An observation challenge!',
+    reward: { coins: 25, xp: 20 },
+    skill: 'cognitive',
+    isExternal: true,
+  },
+  {
+    id: 'memory-test',
+    emoji: '🧠',
+    title: 'Short Term Memory Lab',
+    description: 'Memorize words and test your recall using our easy click interface!',
+    reward: { coins: 30, xp: 25 },
+    skill: 'cognitive',
+    isExternal: true,
+  },
+  {
+    id: 'counting-boxes',
+    emoji: '📦',
+    title: 'Counting Boxes',
+    description: 'Observe the 3D grid and count the blocks quickly! Use left/right taps to adjust count.',
+    reward: { coins: 20, xp: 15 },
+    skill: 'cognitive',
+    isExternal: true, // Needs dedicated custom router layout
+  },
+  {
+    id: 'dody-game',
+    emoji: '🤸',
+    title: 'Dody Game (Full Body)',
+    description: 'Use your whole body to match the poses! Great for gross motor skills and hand gestures.',
+    reward: { coins: 50, xp: 30 },
+    skill: 'gross-motor handgesture',
+    isExternal: true,
+  },
 ];
 
-export default function GameSelector({ onSelectGame, onBack, selectedSkill }) {
+export default function GameSelector({ onSelectGame, onBack, selectedSkill, inputMode }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   // If a skill is selected, highlight matching games
@@ -83,7 +119,25 @@ export default function GameSelector({ onSelectGame, onBack, selectedSkill }) {
         <p>Pick a game to play and earn coins & XP!</p>
 
         <div className="game-grid">
-          {GAMES.map(game => (
+          {GAMES.filter(game => {
+            // First, if a skill is selected, ONLY show games relevant to that skill
+            if (selectedSkill && !getRelevance(game)) {
+              return false;
+            }
+            // Additional specific rule: Car Racing only available on fine-motor
+            if (game.id === 'car-racing') {
+              if (selectedSkill !== 'fine-motor') return false;
+            }
+            // Additional specific rule: Dody Game only available on gross-motor or handgesture
+            if (game.id === 'dody-game') {
+              if (selectedSkill !== 'gross-motor' && selectedSkill !== 'handgesture') return false;
+            }
+            // Hide fish-trace and memory-test when playing with tap mode
+            if ((game.id === 'fish-trace' || game.id === 'memory-test') && inputMode === 'tap') {
+              return false;
+            }
+            return true;
+          }).map(game => (
             <button
               key={game.id}
               className={`game-tile ${getRelevance(game) ? 'relevant' : 'dim'} ${hoveredId === game.id ? 'hovered' : ''}`}

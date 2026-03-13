@@ -10,6 +10,10 @@ import IslandSidebar from './components/IslandSidebar.jsx';
 import GameSelector from './components/GameSelector.jsx';
 import GestureCursor from './components/GestureCursor.jsx';
 import CarRacingGame from './components/CarRacingGame.jsx';
+import FishTraceGame from './components/FishTraceGame.jsx';
+import MemoryTestGame from './components/MemoryTestGame.jsx';
+import CountingBoxesGame from './components/CountingBoxesGame.jsx';
+import BodyGame from './components/BodyGame.jsx';
 
 // ─── Auto-growth thresholds ───
 const GROWTH_THRESHOLDS = [
@@ -298,6 +302,16 @@ export default function App() {
           return;
         }
 
+        // ── Counting Boxes control forwarding ──
+        if (cb.location && cb.location.pathname.includes('/counting-boxes')) {
+          if (data.event === 'LEFT_TAP' || data.event === 'LEFT_CLICK') {
+            window.postMessage({ type: 'counting-boxes-increase' }, '*');
+          } else if (data.event === 'RIGHT_TAP' || data.event === 'RIGHT_CLICK') {
+            window.postMessage({ type: 'counting-boxes-decrease' }, '*');
+          }
+          return;
+        }
+
         // Grow Island
         const world = worldRef.current;
         if (!world || !cb.inGame) return;
@@ -524,10 +538,13 @@ export default function App() {
             <Route path="games" element={
               <GameSelector
                 selectedSkill={currentSkill}
+                inputMode={currentInputType || selectedMode || 'tap'}
                 onSelectGame={(game) => {
-                  if (game.isExternal && game.id === 'car-racing') {
-                    navigate(`/play/${currentInputType}/car-racing?${searchParams.toString()}`);
-                    return;
+                  if (game.isExternal) {
+                    if (game.id === 'car-racing' || game.id === 'fish-trace' || game.id === 'memory-test' || game.id === 'counting-boxes' || game.id === 'dody-game') {
+                      navigate(`/play/${currentInputType}/${game.id}?${searchParams.toString()}`);
+                      return;
+                    }
                   }
                   setActiveGame(game);
                   setGameProgress(0);
@@ -547,6 +564,60 @@ export default function App() {
                   setXp(x => x + Math.floor(earned / 2));
                   showSuccess(`🏎️ Race complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
                   showSpeechBubble('Great race! Your island is growing! 🌴');
+                }}
+              />
+            } />
+
+            <Route path="fish-trace" element={
+              <FishTraceGame
+                inputMode={currentInputType || selectedMode || 'tap'}
+                gazePos={gazePos}
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onCoinsEarned={(earned) => {
+                  setCoins(c => c + earned);
+                  setXp(x => x + Math.floor(earned / 2));
+                  showSuccess(`🐠 Traced successfully! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
+                  showSpeechBubble('Wow, you tracked the glowing fish! 🌊');
+                }}
+              />
+            } />
+
+            <Route path="memory-test" element={
+              <MemoryTestGame
+                inputMode={currentInputType || selectedMode || 'tap'}
+                gazePos={gazePos}
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onCoinsEarned={(earned) => {
+                  setCoins(c => c + earned);
+                  setXp(x => x + Math.floor(earned / 2));
+                  showSuccess(`🧠 Memory Test complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
+                  showSpeechBubble('Your memory is amazing! 🌟');
+                }}
+              />
+            } />
+
+            <Route path="counting-boxes" element={
+              <CountingBoxesGame
+                inputMode={currentInputType || selectedMode || 'tap'}
+                gazePos={gazePos}
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onCoinsEarned={(earned) => {
+                  setCoins(c => c + earned);
+                  setXp(x => x + Math.floor(earned / 2));
+                  showSuccess(`📦 Counting Boxes complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
+                  showSpeechBubble('Wow, you observe so fast! ⏱️');
+                }}
+              />
+            } />
+
+            <Route path="dody-game" element={
+              <BodyGame
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onCoinsEarned={(earned) => {
+                  setCoins(c => c + earned);
+                  setXp(x => x + Math.floor(earned / 2));
+                  showSuccess(`🤸 Dody Game complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
+                  showSpeechBubble('Great moves! Stay active! ⚡');
                 }}
               />
             } />
