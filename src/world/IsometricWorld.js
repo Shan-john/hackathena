@@ -908,7 +908,7 @@ export class IsometricWorld {
     else placedMesh = this.addTree(x, z);
 
     if (placedMesh && this.onPlacementComplete) {
-      this.onPlacementComplete(this.placementItem);
+      this.onPlacementComplete(this.placementItem, x, z);
     }
   }
 
@@ -956,7 +956,7 @@ export class IsometricWorld {
     else placedMesh = this.addTree(x, z);
 
     if (placedMesh && this.onPlacementComplete) {
-      this.onPlacementComplete(this.placementItem);
+      this.onPlacementComplete(this.placementItem, x, z);
     }
     return true;
   }

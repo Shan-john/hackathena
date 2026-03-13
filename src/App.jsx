@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Routes, Route, useNavigate, useParams, useSearchParams, Outlet, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, useParams, useSearchParams, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { IsometricWorld } from './world/IsometricWorld.js';
 import { InputSystem } from './input/InputSystem.js';
 import WelcomeScreen from './components/WelcomeScreen.jsx';
@@ -14,6 +14,8 @@ import FishTraceGame from './components/FishTraceGame.jsx';
 import MemoryTestGame from './components/MemoryTestGame.jsx';
 import CountingBoxesGame from './components/CountingBoxesGame.jsx';
 import BodyGame from './components/BodyGame.jsx';
+import { supabase } from './supabaseClient.js';
+import { LoginPage, SignupPage } from './components/Auth.jsx';
 
 // Auto-growth removed in favor of manual store placement
 const LEVEL_NAMES = ['Meadow', 'Forest', 'Village', 'Castle', 'Fantasy Land'];
@@ -23,7 +25,7 @@ const MAX_LEVEL = 5;
 // ==========================================
 // GAME LAYOUT: Only initializes Three.js world
 // ==========================================
-function GameLayout({ canvasRef, worldRef }) {
+function GameLayout({ canvasRef, worldRef, savedObjects, setSavedObjects }) {
   const { inputType } = useParams();
 
   useEffect(() => {
@@ -44,6 +46,13 @@ function GameLayout({ canvasRef, worldRef }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputType]);
+
+  useEffect(() => {
+    if (worldRef.current && savedObjects && savedObjects.length > 0) {
+      worldRef.current.loadSavedObjects(savedObjects);
+      setSavedObjects([]); // Clear so we don't double load
+    }
+  }, [worldRef, savedObjects, setSavedObjects]);
 
   return <Outlet />;
 }
@@ -87,6 +96,72 @@ export default function App() {
   const [gazePos, setGazePos]             = useState(null);
   const gazeRef  = useRef(null);
 
+  // ─── AUTH & DATA SYNC ───
+  const [session, setSession] = useState(null);
+  const [savedObjects, setSavedObjects] = useState([]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadPlayerData(session.user.id);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) loadPlayerData(session.user.id);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const loadPlayerData = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('player_data')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+        
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching player data:', error);
+      } else if (data) {
+        setCoins(data.coins ?? 0);
+        setXp(data.xp ?? 0);
+        setLevel(data.level ?? 1);
+      } else {
+        // First login: create row
+        await supabase.from('player_data').insert([{ user_id: userId, coins: 0, xp: 0, level: 1 }]);
+      }
+
+      // Load placed objects
+      const { data: objectsData, error: objectsError } = await supabase
+        .from('placed_objects')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (!objectsError && objectsData) {
+        setSavedObjects(objectsData);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Debounce save to Supabase
+  useEffect(() => {
+    if (!session) return;
+    const saveToDb = async () => {
+      await supabase
+        .from('player_data')
+        .update({ coins, xp, level })
+        .eq('user_id', session.user.id);
+    };
+    const t = setTimeout(saveToDb, 2000); // Wait 2s before saving changes
+    return () => clearTimeout(t);
+  }, [coins, xp, level, session]);
+
   // ─── Clash of Clans Style Store ───
   const [storeItems] = useState([
     { name: 'Flower',       icon: '🌸', cost: 10 },
@@ -104,15 +179,26 @@ export default function App() {
   // Hook up placement callback
   useEffect(() => {
     if (worldRef.current) {
-      worldRef.current.onPlacementComplete = (itemName) => {
+      worldRef.current.onPlacementComplete = async (itemName, x, z) => {
         // Find cost and subtract
         const item = storeItems.find(i => i.name === itemName);
         if (item) setCoins(c => Math.max(0, c - item.cost));
         setPlacingItem(null);
         if (worldRef.current) worldRef.current.setPlacementMode(null);
+
+        // Save into db
+        if (session) {
+          const { error } = await supabase.from('placed_objects').insert([{
+             user_id: session.user.id,
+             item_name: itemName,
+             x: x,
+             z: z
+          }]);
+          if (error) console.error("Error saving object:", error);
+        }
       };
     }
-  }, [storeItems]);
+  }, [storeItems, session]);
 
   // ─── Helpers ───
   const showSpeechBubble = useCallback((text) => {
@@ -168,6 +254,8 @@ export default function App() {
 
   // ─── Listen for Passive Troop Coins ───
   useEffect(() => {
+    if (!session) return;
+
     function onTroopCoin(e) {
       setCoins(c => c + e.detail);
       // Create a tiny floating coin element in the DOM at a random spot for flavor
@@ -188,13 +276,15 @@ export default function App() {
     }
     window.addEventListener('troop-coin-earned', onTroopCoin);
     return () => window.removeEventListener('troop-coin-earned', onTroopCoin);
-  }, []);
+  }, [session]);
 
   // ═══════════════════════════════════════════════════════════════
   //  DIRECT WEBSOCKET to Python Tap / Eye Tracker sensor
   //  Lives at the App level so it NEVER disconnects on route change
   // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
+    if (!session) return;
+
     let ws = null;
     let disposed = false;
 
@@ -394,7 +484,9 @@ export default function App() {
       if (ws) { try { ws.close(); } catch {} }
       input.dispose();
     };
-  }, []);
+  }, [session]);
+
+
 
   // ─── Persist selected mode & send to Python backend ───
   useEffect(() => {
@@ -464,6 +556,20 @@ export default function App() {
   const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
   const currentSkill     = searchParams.get('skill') || '';
 
+  // Show Auth Screen if not logged in - redirect to /login
+  if (!session) {
+    // Allow /login and /signup routes to render without session
+    const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup';
+    if (!isAuthRoute) {
+      return <Navigate to="/login" replace />;
+    }
+  }
+
+  // If logged in and visiting /login or /signup, redirect to /home
+  if (session && (location.pathname === '/login' || location.pathname === '/signup')) {
+    return <Navigate to="/home" replace />;
+  }
+
   return (
     <>
       <canvas ref={canvasRef} id="game-canvas" />
@@ -485,6 +591,12 @@ export default function App() {
               <div className="hud-badge coin-badge">🪙 {coins}</div>
               <div className="hud-badge level-badge">⭐ Lv.{level} — {LEVEL_NAMES[Math.min(level - 1, 4)]}</div>
               {currentSkill && <div className="hud-badge skill-badge">🧠 {currentSkill}</div>}
+              <button 
+                onClick={() => supabase.auth.signOut()} 
+                style={{ marginLeft: '10px', background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Sign Out
+              </button>
             </div>
             <div className="progress-bar-container">
               <div className="progress-bar-fill" style={{ width: `${xpPercent}%` }} />
@@ -507,7 +619,13 @@ export default function App() {
         {successMsg   && <div className="success-toast" role="alert">{successMsg}</div>}
 
         <Routes>
-          <Route path="/" element={<WelcomeScreen onStart={() => navigate('/pick-input')} menuActionRef={menuActionRef} />} />
+          {/* Auth Routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+
+          {/* Home / Welcome */}
+          <Route path="/home" element={<WelcomeScreen onStart={() => navigate('/pick-input')} menuActionRef={menuActionRef} />} />
+          <Route path="/" element={<Navigate to="/home" replace />} />
 
           <Route path="/pick-input" element={
             <InputSelector
@@ -531,7 +649,7 @@ export default function App() {
           } />
 
           <Route path="/play/:inputType" element={
-            <GameLayout canvasRef={canvasRef} worldRef={worldRef} />
+            <GameLayout canvasRef={canvasRef} worldRef={worldRef} savedObjects={savedObjects} setSavedObjects={setSavedObjects} />
           }>
             <Route index element={
               <>
