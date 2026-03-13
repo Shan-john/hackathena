@@ -4,6 +4,7 @@ const INPUT_TYPES = [
   { id: 'eye',     icon: '👁️',  label: 'Eye Tracking',     desc: 'Look at objects to select them' },
   { id: 'gesture', icon: '✋',  label: 'Hand Gesture',     desc: 'Use your hand as a virtual mouse' },
   { id: 'tap',     icon: '👆',  label: 'Tap & Drag',       desc: 'Touch or click to interact' },
+  { id: 'voice',   icon: '🎤',  label: 'Voice Control',    desc: 'Speak commands to play' },
 ];
 
 export default function InputSelector({ onConfirm, menuActionRef, onModeSelected }) {

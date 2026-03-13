@@ -94,6 +94,15 @@ const GAMES = [
     skill: 'gross-motor handgesture',
     isExternal: true,
   },
+  {
+    id: 'voice-runner',
+    emoji: '🏃',
+    title: 'Voice Runner',
+    description: 'Say "UP" loudly into the microphone or press Space to jump over obstacles and earn coins!',
+    reward: { coins: 30, xp: 20 },
+    skill: 'speech cognitive',
+    isExternal: true,
+  },
 ];
 
 export default function GameSelector({ onSelectGame, onBack, selectedSkill, inputMode }) {
@@ -104,9 +113,11 @@ export default function GameSelector({ onSelectGame, onBack, selectedSkill, inpu
     if (!selectedSkill) return true;
     const skillLower = selectedSkill.toLowerCase();
     return game.skill.includes(skillLower) || 
-           skillLower.includes('cognitive') && game.skill === 'cognitive' ||
+           skillLower.includes('cognitive') && game.skill.includes('cognitive') ||
            skillLower.includes('motor') && game.skill.includes('motor') ||
-           skillLower.includes('social') && game.skill === 'social-emotional';
+           skillLower.includes('social') && game.skill === 'social-emotional' ||
+           skillLower.includes('speech') && game.skill.includes('speech') ||
+           game.id === 'voice-runner'; // Force Voice Runner to always appear as requested
   };
 
   return (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 // =========================================
@@ -7,6 +7,12 @@ import { supabase } from '../supabaseClient';
 // =========================================
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get the redirect path if the user came from a protected route
+  const fromState = location.state?.from;
+  const fromPath = fromState ? (fromState.pathname + (fromState.search || '')) : '/home';
+
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +25,7 @@ export function LoginPage() {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      navigate('/home');
+      navigate(fromPath, { replace: true });
     } catch (error) {
       setMessage(`Error: ${error.message}`);
     } finally {
@@ -67,7 +73,7 @@ export function LoginPage() {
 
         <p className="auth-switch">
           Don't have an account?{' '}
-          <span onClick={() => navigate('/signup')}>Sign up here →</span>
+          <span onClick={() => navigate('/signup', { state: { from: location.state?.from } })}>Sign up here →</span>
         </p>
       </div>
     </div>
@@ -79,6 +85,8 @@ export function LoginPage() {
 // =========================================
 export function SignupPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -167,7 +175,7 @@ export function SignupPage() {
 
         <p className="auth-switch">
           Already have an account?{' '}
-          <span onClick={() => navigate('/login')}>Login here →</span>
+          <span onClick={() => navigate('/login', { state: { from: location.state?.from } })}>Login here →</span>
         </p>
       </div>
     </div>

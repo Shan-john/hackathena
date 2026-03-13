@@ -15,7 +15,15 @@ export class IsometricWorld {
     this.mouse = new THREE.Vector2();
     this.onPlacementComplete = null; // Callback when item placed
     this.level = 1; // Default level
+    this.isRotating = true; 
+    this.islandRotationY = 0;
+    this.lastElapsed = 0;
     this.init();
+  }
+
+  toggleRotation() {
+    this.isRotating = !this.isRotating;
+    return this.isRotating;
   }
 
   setLevel(level) {
@@ -831,6 +839,29 @@ export class IsometricWorld {
   //  Interaction & Placement
   // ─────────────────────────────
 
+  /** Load saved objects from database and reconstruct them on the island */
+  loadSavedObjects(savedItems) {
+    if (!savedItems || savedItems.length === 0) return;
+    console.log(`[World] Loading ${savedItems.length} saved objects...`);
+    savedItems.forEach(item => {
+      const { item_name, x, z } = item;
+      try {
+        if (item_name === 'Tree') this.growSeed(x, z);
+        else if (item_name === 'Flower') this.addFlower(x, z);
+        else if (item_name === 'House') this.addHouse(x, z);
+        else if (item_name === 'Dragon') this.addAnimal(x, z);
+        else if (item_name === 'Wall') this.addWall(x, z);
+        else if (item_name === 'Cannon') this.addCannon(x, z);
+        else if (item_name === 'Archer Tower') this.addArcherTower(x, z);
+        else if (item_name === 'Gold Mine') this.addGoldMine(x, z);
+        else this.addTree(x, z);
+      } catch (e) {
+        console.warn(`[World] Failed to load object: ${item_name}`, e);
+      }
+    });
+    console.log(`[World] ✅ All saved objects loaded!`);
+  }
+
   setPlacementMode(type) {
     if (this.ghostMesh) {
       this.scene.remove(this.ghostMesh);
@@ -1224,7 +1255,14 @@ export class IsometricWorld {
     // Gentle floating/bobbing of the island
     if (this.islandGroup) {
       this.islandGroup.position.y = Math.sin(elapsed * 0.5) * 0.4;
-      this.islandGroup.rotation.y = elapsed * 0.02; // Slow spin
+      
+      const delta = elapsed - this.lastElapsed;
+      this.lastElapsed = elapsed;
+
+      if (this.isRotating) {
+        this.islandRotationY += delta * 0.05; // Gentle spin
+      }
+      this.islandGroup.rotation.y = this.islandRotationY;
     }
 
     // Glow ring pulse

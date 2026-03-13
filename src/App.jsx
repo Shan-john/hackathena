@@ -14,8 +14,11 @@ import FishTraceGame from './components/FishTraceGame.jsx';
 import MemoryTestGame from './components/MemoryTestGame.jsx';
 import CountingBoxesGame from './components/CountingBoxesGame.jsx';
 import BodyGame from './components/BodyGame.jsx';
+import VoiceRunnerGame from './components/VoiceRunnerGame.jsx';
 import { supabase } from './supabaseClient.js';
+import { initSpeechRecognizer, stopSpeechRecognizer } from './input/speechCommand.js';
 import { LoginPage, SignupPage } from './components/Auth.jsx';
+import CaregiverPanel from './components/CaregiverPanel.jsx';
 
 // Auto-growth removed in favor of manual store placement
 const LEVEL_NAMES = ['Meadow', 'Forest', 'Village', 'Castle', 'Fantasy Land'];
@@ -92,18 +95,28 @@ export default function App() {
   const [speechBubble, setSpeechBubble]   = useState(null);
   const [successMsg, setSuccessMsg]       = useState(null);
   const [tapDialog, setTapDialog]         = useState(null);
+  const [isRotating, setIsRotating]       = useState(true);
 
   const [gazePos, setGazePos]             = useState(null);
   const gazeRef  = useRef(null);
 
+  const toggleWorldRotation = () => {
+    if (worldRef.current) {
+      const newSt = worldRef.current.toggleRotation();
+      setIsRotating(newSt);
+    }
+  };
+
   // ─── AUTH & DATA SYNC ───
   const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true); // Wait for session check
   const [savedObjects, setSavedObjects] = useState([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) loadPlayerData(session.user.id);
+      setAuthLoading(false); // Done checking
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -162,6 +175,58 @@ export default function App() {
     return () => clearTimeout(t);
   }, [coins, xp, level, session]);
 
+  // ─── REALTIME SYNC across devices ───
+  const realtimeIgnoreRef = useRef(new Set()); // Track IDs we placed locally to avoid echo
+
+  useEffect(() => {
+    if (!session) return;
+    const userId = session.user.id;
+
+    // Subscribe to new placed objects (from OTHER devices)
+    const objectsChannel = supabase
+      .channel('placed_objects_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'placed_objects', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const newObj = payload.new;
+          // Skip if we placed this object ourselves (avoid double render)
+          if (realtimeIgnoreRef.current.has(newObj.id)) {
+            realtimeIgnoreRef.current.delete(newObj.id);
+            return;
+          }
+          console.log('[Realtime] New object from another device:', newObj.item_name);
+          // Add directly to the 3D world
+          if (worldRef.current && worldRef.current.loadSavedObjects) {
+            worldRef.current.loadSavedObjects([newObj]);
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to player_data changes (coins/xp/level from OTHER devices)
+    const playerChannel = supabase
+      .channel('player_data_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'player_data', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const updated = payload.new;
+          console.log('[Realtime] Player data updated from another device:', updated);
+          // Only apply if values differ to prevent infinite loops
+          setCoins(prev => updated.coins !== prev ? (updated.coins ?? prev) : prev);
+          setXp(prev => updated.xp !== prev ? (updated.xp ?? prev) : prev);
+          setLevel(prev => updated.level !== prev ? (updated.level ?? prev) : prev);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(objectsChannel);
+      supabase.removeChannel(playerChannel);
+    };
+  }, [session]);
+
   // ─── Clash of Clans Style Store ───
   const [storeItems] = useState([
     { name: 'Flower',       icon: '🌸', cost: 10 },
@@ -186,15 +251,18 @@ export default function App() {
         setPlacingItem(null);
         if (worldRef.current) worldRef.current.setPlacementMode(null);
 
-        // Save into db
+        // Save into db and mark as local so realtime doesn't double-render
         if (session) {
-          const { error } = await supabase.from('placed_objects').insert([{
+          const { data: inserted, error } = await supabase.from('placed_objects').insert([{
              user_id: session.user.id,
              item_name: itemName,
              x: x,
              z: z
-          }]);
+          }]).select().single();
           if (error) console.error("Error saving object:", error);
+          else if (inserted) {
+            realtimeIgnoreRef.current.add(inserted.id); // Prevent echo from realtime
+          }
         }
       };
     }
@@ -307,8 +375,10 @@ export default function App() {
       ws.onmessage = (evt) => {
         let data;
         try { data = JSON.parse(evt.data); } catch { return; }
-        console.log('[Tap] Received:', data.event);
+        processInputEvent(data);
+      };
 
+      const processInputEvent = (data) => {
         const cb = cbRef.current;
 
         // ─── Gaze Tracking ───
@@ -411,7 +481,8 @@ export default function App() {
         // ── Gameplay Inputs ──
         // Tap is ALWAYS accepted. Other inputs only if their mode is selected.
         const inputType = cb.currentInputType || cb.selectedMode;
-        const acceptTap     = isTap;  // taps always work
+        // Taps, and pseudo-taps from voice, always work
+        const acceptTap     = isTap;  
         const acceptBlink   = isBlink && inputType === 'eye';
         const acceptGesture = isGesture && inputType === 'gesture';
 
@@ -473,6 +544,23 @@ export default function App() {
       };
     }
 
+    const handleVoiceCmd = (e) => {
+      const cb = cbRef.current;
+      const mode = cb.currentInputType || cb.selectedMode;
+      if (mode !== 'voice') return; // only process voice if mode is set
+      const word = e.detail;
+      // "up" / "left" -> LEFT_TAP (Confirm or Jump)
+      if (word === 'up' || word === 'left') {
+        processInputEvent({ event: 'LEFT_TAP' });
+      } 
+      // "down" / "right" -> RIGHT_TAP (Cycle or Move)
+      else if (word === 'down' || word === 'right') {
+        processInputEvent({ event: 'RIGHT_TAP' });
+      }
+    };
+
+    window.addEventListener('voice-command', handleVoiceCmd);
+
     connect();
 
     // Also create InputSystem for voice/eye/gesture (not for taps)
@@ -482,9 +570,19 @@ export default function App() {
     return () => {
       disposed = true;
       if (ws) { try { ws.close(); } catch {} }
+      window.removeEventListener('voice-command', handleVoiceCmd);
       input.dispose();
     };
   }, [session]);
+
+  // ─── Voice Recognition toggle based on mode ───
+  useEffect(() => {
+    if (currentInputType === 'voice') {
+      initSpeechRecognizer(null);
+    } else {
+      stopSpeechRecognizer();
+    }
+  }, [currentInputType]);
 
 
 
@@ -556,12 +654,29 @@ export default function App() {
   const xpPercent        = Math.min((xpForLevel / XP_PER_LEVEL) * 100, 100);
   const currentSkill     = searchParams.get('skill') || '';
 
+  // While Supabase is checking the session, show a loading screen
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        height: '100vh', width: '100vw', position: 'fixed', top: 0, left: 0,
+        background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)',
+        color: '#fff', fontSize: '1.5rem', fontFamily: 'Inter, sans-serif', zIndex: 99999,
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem', animation: 'authLogoBounce 2s ease-in-out infinite' }}>🏰</div>
+          <div>Loading HackAthena...</div>
+        </div>
+      </div>
+    );
+  }
+
   // Show Auth Screen if not logged in - redirect to /login
   if (!session) {
     // Allow /login and /signup routes to render without session
     const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup';
     if (!isAuthRoute) {
-      return <Navigate to="/login" replace />;
+      return <Navigate to="/login" replace state={{ from: location }} />;
     }
   }
 
@@ -591,12 +706,27 @@ export default function App() {
               <div className="hud-badge coin-badge">🪙 {coins}</div>
               <div className="hud-badge level-badge">⭐ Lv.{level} — {LEVEL_NAMES[Math.min(level - 1, 4)]}</div>
               {currentSkill && <div className="hud-badge skill-badge">🧠 {currentSkill}</div>}
-              <button 
-                onClick={() => supabase.auth.signOut()} 
-                style={{ marginLeft: '10px', background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Sign Out
-              </button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                <button 
+                  onClick={toggleWorldRotation} 
+                  style={{ background: 'rgba(255, 255, 255, 0.2)', color: 'white', border: 'none', padding: '0.4rem 0.6rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}
+                  title={isRotating ? "Pause Rotation" : "Resume Rotation"}
+                >
+                  {isRotating ? '⏸️' : '▶️'}
+                </button>
+                <button 
+                  onClick={() => navigate('/caregiver')} 
+                  style={{ background: 'linear-gradient(135deg, #818cf8, #c084fc)', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem' }}
+                >
+                  🩺 Caregiver
+                </button>
+                <button 
+                  onClick={() => supabase.auth.signOut()} 
+                  style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Sign Out
+                </button>
+              </div>
             </div>
             <div className="progress-bar-container">
               <div className="progress-bar-fill" style={{ width: `${xpPercent}%` }} />
@@ -622,6 +752,9 @@ export default function App() {
           {/* Auth Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+
+          {/* Caregiver Panel */}
+          <Route path="/caregiver" element={<CaregiverPanel />} />
 
           {/* Home / Welcome */}
           <Route path="/home" element={<WelcomeScreen onStart={() => navigate('/pick-input')} menuActionRef={menuActionRef} />} />
@@ -670,7 +803,7 @@ export default function App() {
                 inputMode={currentInputType || selectedMode || 'tap'}
                 onSelectGame={(game) => {
                   if (game.isExternal) {
-                    if (game.id === 'car-racing' || game.id === 'fish-trace' || game.id === 'memory-test' || game.id === 'counting-boxes' || game.id === 'dody-game') {
+                    if (game.id === 'car-racing' || game.id === 'fish-trace' || game.id === 'memory-test' || game.id === 'counting-boxes' || game.id === 'dody-game' || game.id === 'voice-runner') {
                       navigate(`/play/${currentInputType}/${game.id}?${searchParams.toString()}`);
                       return;
                     }
@@ -721,6 +854,20 @@ export default function App() {
                   setXp(x => x + Math.floor(earned / 2));
                   showSuccess(`🧠 Memory Test complete! +${earned} 🪙  +${Math.floor(earned / 2)} ⭐`);
                   showSpeechBubble('Your memory is amazing! 🌟');
+                }}
+              />
+            } />
+
+            <Route path="voice-runner" element={
+              <VoiceRunnerGame
+                gameTitle="Voice Runner"
+                onBack={() => navigate(`/play/${currentInputType}?${searchParams.toString()}`)}
+                onWin={({ coins: earnedCoins, xp: earnedXp }) => {
+                  setCoins(c => c + earnedCoins);
+                  setXp(x => x + earnedXp);
+                  showSuccess(`🏃‍♂️ Fantastic jump run! +${earnedCoins} 🪙  +${earnedXp} ⭐`);
+                  showSpeechBubble('Nice voice control skills! 🎤');
+                  navigate(`/play/${currentInputType}?${searchParams.toString()}`);
                 }}
               />
             } />
